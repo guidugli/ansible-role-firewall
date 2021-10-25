@@ -1,0 +1,37 @@
+---
+
+- name: "IPv6 support check - Method 1: Check IPv6 module status"
+  command: cat /sys/module/ipv6/parameters/disable
+  register: firewall_cmd_result
+  changed_when: false
+  failed_when: false
+
+- name: Set results Method 1
+  set_fact:
+    firewall_ipv6_enabled: "{{ true if (firewall_cmd_result.rc == 0 and
+                               firewall_cmd_result.stdout | int(-1) == 0) else false }}"
+
+- name: "IPv6 support check - Method 2: Using sysctl"
+  command: expr `sysctl -b net.ipv6.conf.all.disable_ipv6` + `sysctl -b net.ipv6.conf.default.disable_ipv6`
+  register: firewall_cmd_result
+  changed_when: false
+  failed_when: false
+  when: firewall_ipv6_enabled
+
+- name: Set results Method 2
+  set_fact:
+    firewall_ipv6_enabled: "{{ true if (firewall_cmd_result.rc == 0 and
+                               firewall_cmd_result.stdout | int(-1) == 0) else false }}"
+  when: firewall_ipv6_enabled
+
+- name: "IPv6 support check - Method 3: Check /proc/net/if_inet6"
+  raw: test -f /proc/net/if_inet6
+  register: firewall_cmd_result
+  changed_when: false
+  failed_when: false
+  when: firewall_ipv6_enabled
+
+- name: Set results Method 3
+  set_fact:
+    firewall_ipv6_enabled: "{{ true if (firewall_cmd_result.rc == 0) else false }}"
+  when: firewall_ipv6_enabled

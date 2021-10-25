@@ -1,0 +1,75 @@
+---
+# defaults file for firewall
+
+# Please remember that this role:
+#    - Assumes/Set default INPUT and FORWARD actions as deny.
+#    - Default OUTPUT action is configured by firewall_block_all_output var
+#    - is target for internal servers needing basic rules, so no forwarding
+#      rules can be implemented here
+#    - will configure loopback on UFW as:
+#          ufw allow in on lo
+#          ufw allow out from lo
+#          ufw deny in from 127.0.0.0/8
+#          ufw deny in from ::1
+#    - UFW reads service names from /etc/services
+#      but firewalld have XML files defining the services.
+#
+
+
+# Allow user to choose which firewall software to use
+firewall_selected: "{{ _suggested_os_firewall }}"
+
+## FIREWALLD SPECIFIC SETTINGS ##
+firewalld_default_zone: public
+
+# If you don't specify a protocol in `firewall_services`, fall back to this.
+firewall_default_protocol: tcp
+
+# If you don't specify a target in `firewall_services`, fall back to this. Valid options: allow, deny.
+firewall_default_action: allow
+
+# Assign interfaces to zones
+#firewall_interface_zone:
+#  - interface: enp1s0
+#    zone: "{{ firewalld_default_zone }}"
+#  - interface: virbr0
+#    zone: libvirt
+
+# Maps a service name with port numbers.
+# For firewalld, if service exists, updates the ports, otherwise create the service
+# For UFW, do nothing, just use the port numbers when running the command later on the ports.
+# For example, cockpit port 9090/tcp would prevent an error of having a rule with service name
+# as cockpit as it is not on /etc/services, so ufw cannot recognize it.
+#firewall_service_mapping:
+#  - name: ssh
+#    ports: ['14090/tcp']
+#  - name: cockpit
+#    ports: ['9090/tcp']
+#  - name: kodi
+#    # Description will only be used for new services
+#    description: 'This option allows kodi remote controls to communicate with kodi application'
+#    short: 'Allows kodi remotes to access kodi'
+#    ports: ['18998/tcp']
+#  - name: dhcpv6-client
+#    ports: ['546/udp']
+
+# Should output traffic be allowed?
+# If set to yes, it will still open ports 80 (http), 443 (https),
+# 67 (dhcp) and 53 (DNS), so system updates continue to work
+firewall_output_default_action: allow   # options: allow or deny
+#firewall_output_allow_ports:
+#  - { port: 80, protocol: tcp }
+#  - { port: 443, protocol: tcp }
+#  - { port: 53, protocol: tcp }
+#  - { port: 53, protocol: udp }
+#  - { port: 67, protocol: tcp }
+#  - { port: 67, protocol: udp }
+
+# A list of service to allow traffic to.
+#firewall_services:
+#  - name: ssh
+#  - name: kodi
+#  - name: cockpit
+#    action: deny
+#  - name: dhcpv6-client
+#    action: deny

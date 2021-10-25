@@ -1,0 +1,181 @@
+---
+# Tasks for firewalld firewall implementation and configuration
+
+# Avoid losing connection to server. Since it is only runtime
+# it won't persist unless specified in the configuration variables.
+- name: Apply a runtime only rule to add current ssh connection
+  firewalld:
+    port: "{{ ansible_port }}/tcp"
+    permanent: no
+    state: enabled
+  when:
+    - ansible_port is defined
+    - firewall_sw_install_result is changed or firewall_service_enablement_result is changed
+
+- name: Verify if provided service mapping exists on target system
+  include_tasks: firewalld_services.yml
+  loop: "{{ firewall_service_mapping  }}"
+
+- name: Retrieve and configure firewalld default zone
+  block:
+    - name: Ensure default zone is set for firewalld
+      command: /usr/bin/firewall-cmd --get-default-zone
+      changed_when: false
+      register: firewalld_get_default_zone_cmd
+
+    - name: Set default zone to {{ firewalld_default_zone | default('public') }}
+      command: "firewall-cmd --set-default-zone={{ firewalld_default_zone | default('public') }}"
+      when:
+        - firewalld_default_zone is defined
+        - firewalld_get_default_zone_cmd.stdout != firewalld_default_zone
+
+    # In case user did not specify a default zone
+    - name: Update firewalld_default_zone if required
+      set_fact:
+        firewalld_default_zone: "{{ firewalld_get_default_zone_cmd.stdout }}"
+      when: firewalld_default_zone is undefined
+
+- name: open ports (firewalld-port)
+  firewalld:
+    port: "{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}"
+    permanent: yes
+    state: enabled
+    zone: "{{ item.zone | default(firewalld_default_zone) }}"
+  loop: "{{ firewall_services }}"
+  when:
+    - firewall_services is defined
+    - item.name | int(-1) > 0
+    - (item.action is undefined and firewall_default_action == 'allow') or
+      (item.action is defined and item.action == 'allow')
+  loop_control:
+    label: "{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}"
+  notify:
+    - reload firewalld
+
+- name: close ports (firewalld-port)
+  firewalld:
+    port: "{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}"
+    permanent: yes
+    state: disabled
+    zone: "{{ item.zone | default(firewalld_default_zone) }}"
+  loop: "{{ firewall_services }}"
+  when:
+    - item.name is number
+    - (item.action is undefined and firewall_default_action == 'deny') or
+      (item.action is defined and item.action == 'deny')
+  loop_control:
+    label: "{{ item.name }}"
+  notify:
+    - reload firewalld
+
+- name: open ports (firewalld-service)
+  firewalld:
+    service: "{{ item.name }}"
+    permanent: yes
+    state: enabled
+    zone: "{{ item.zone | default(firewalld_default_zone) }}"
+  loop: "{{ firewall_services }}"
+  when:
+    - item.name is not number
+    - (item.action is undefined and firewall_default_action == 'allow') or
+      (item.action is defined and item.action == 'allow')
+  loop_control:
+    label: "{{ item.name }}"
+  notify:
+    - reload firewalld
+
+- name: close ports (firewalld-service)
+  vars:
+    item_action: "{{ item.action | default(firewall_default_action) }}"
+    item_zone: "{{ item.zone | default(firewalld_default_zone) }}"
+  firewalld:
+    service: "{{ item.name }}"
+    permanent: yes
+    state: disabled
+    zone: "{{ item_zone }}"
+  loop: "{{ firewall_services }}"
+  when:
+    - item.name is not number
+    - (item.action is undefined and firewall_default_action == 'deny') or
+      (item.action is defined and item_action == 'deny')
+  loop_control:
+    label: "{{ item.name }}, {{ item_zone }}"
+  notify:
+    - reload firewalld
+
+- name: Configure OUTPUT chain
+  block:
+    - name: Add rule to allow established connections
+      command: "firewall-offline-cmd --direct --add-rule ipv4 filter OUTPUT 0 -m state --state ESTABLISHED,RELATED -j ACCEPT"  # yamllint disable-line rule:line-length
+      changed_when: firewall_output_cmd.stderr | length == 0
+      register: firewall_output_cmd
+      when: firewall_output_default_action == 'deny'
+      notify:
+        - reload firewalld
+
+    - name: Add rules to allow outgoing connection for selected ports
+      command: "firewall-offline-cmd --direct --add-rule ipv4 filter OUTPUT 1 -p {{ item.protocol }} -m {{ item.protocol }} --dport {{ item.port }} -j ACCEPT"  # yamllint disable-line rule:line-length
+      changed_when: firewall_output_cmd.stderr | length == 0
+      register: firewall_output_cmd
+      loop: "{{ firewall_output_allow_ports }}"
+      when: firewall_output_default_action == 'deny'
+      notify:
+        - reload firewalld
+
+    - name: Add rule to deny all traffic that do not match previous rules
+      command: "firewall-offline-cmd --direct --add-rule ipv4 filter OUTPUT 2 -j DROP"
+      changed_when: firewall_output_cmd.stderr | length == 0
+      register: firewall_output_cmd
+      when: firewall_output_default_action == 'deny'
+      notify:
+        - reload firewalld
+
+    - name: Add rule to allow established connections
+      command: "firewall-offline-cmd --direct --remove-rule ipv4 filter OUTPUT 0 -m state --state ESTABLISHED,RELATED -j ACCEPT"  # yamllint disable-line rule:line-length
+      changed_when: firewall_output_cmd.rc == 0
+      failed_when: firewall_output_cmd.rc not in [0,2]
+      register: firewall_output_cmd
+      when: firewall_output_default_action == 'allow'
+      notify:
+        - reload firewalld
+
+    - name: Add rules to allow outgoing connection for selected ports
+      command: >
+        firewall-offline-cmd --direct --remove-rule ipv4 filter OUTPUT 1
+         -p {{ item.protocol }} -m {{ item.protocol }} --dport {{ item.port }} -j ACCEPT
+      changed_when: firewall_output_cmd.stderr | length == 0
+      failed_when: firewall_output_cmd.rc not in [0,2]
+      register: firewall_output_cmd
+      loop: "{{ firewall_output_allow_ports }}"
+      when: firewall_output_default_action == 'allow'
+      notify:
+        - reload firewalld
+
+    - name: Add rule to deny all traffic that do not match previous rules
+      command: "firewall-offline-cmd --direct --remove-rule ipv4 filter OUTPUT 2 -j DROP"
+      changed_when: firewall_output_cmd.stderr | length == 0
+      failed_when: firewall_output_cmd.rc not in [0,2]
+      register: firewall_output_cmd
+      when: firewall_output_default_action == 'allow'
+      notify:
+        - reload firewalld
+
+- name: Set zones for network devices
+  firewalld:
+    zone: "{{ item.zone }}"
+    interface: "{{ item.interface }}"
+    permanent: yes
+    state: enabled
+  loop: "{{ firewall_interface_zone | default([]) }}"
+
+- name: Force flush handlers
+  meta: flush_handlers
+
+- name: Display effective configuration after tasks
+  command: "firewall-offline-cmd --list-all-zones"
+  register: firewall_output_cmd
+  changed_when: false
+
+- name: Show last task output
+  debug:
+    msg: "{{ firewall_output_cmd.stdout_lines }}"

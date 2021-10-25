@@ -1,0 +1,62 @@
+---
+- name: Converge
+  user: root
+  hosts: all
+  vars:
+    firewall_selected: "{{ _suggested_os_firewall }}"
+    firewalld_default_zone: public
+    firewall_default_protocol: tcp
+    firewall_default_action: allow
+    firewall_service_mapping:
+      - name: ssh
+        ports: ['19999/tcp']
+      - name: cockpit
+        ports: ['9090/tcp']
+      - name: kodi
+        # Description will only be used for new services
+        description: 'This option allows kodi remote controls to communicate with kodi application'
+        short: 'Allows kodi remotes to access kodi'
+        ports: ['18998/tcp']
+      - name: dhcpv6-client
+        ports: ['546/udp']
+    firewall_output_default_action: allow   # options: allow or deny
+    firewall_output_allow_ports:
+      - { port: 80, protocol: tcp }
+      - { port: 443, protocol: tcp }
+      - { port: 53, protocol: tcp }
+      - { port: 53, protocol: udp }
+      - { port: 67, protocol: tcp }
+      - { port: 67, protocol: udp }
+    firewall_services:
+      - name: ssh
+      - name: kodi
+      - name: cockpit
+        action: deny
+      - name: dhcpv6-client
+        action: deny
+
+  pre_tasks:
+#    - name: update RedHat systems running yum
+#      yum:
+#        name: "*"
+#        state: latest
+#      when: ansible_pkg_mgr in ['yum', 'dnf']
+
+    # add sysctl for testing since containers dont have it
+    - name: update Ubuntu/Debian systems
+      apt:
+#        upgrade: dist
+        name: procps
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_pkg_mgr == "apt"
+
+    - name: Install missing RedHat container packages
+      yum:
+        state: latest
+        name:
+          - procps-ng
+      when: ansible_pkg_mgr in ['yum', 'dnf']
+
+  roles:
+    - role: guidugli.firewall

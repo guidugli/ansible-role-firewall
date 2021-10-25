@@ -1,0 +1,131 @@
+---
+
+- name: Configure loopback to prevent spoofing
+  block:
+    - name: Ensure incoming traffic from loopback is allowed
+      ufw:
+        rule: allow
+        interface: lo
+        direction: in
+
+    - name: Ensure outgoing traffic from loopback is allowed
+      ufw:
+        rule: allow
+        interface: lo
+        direction: out
+
+    - name: Ensure incoming traffic is denied from 127.0.0.0/8
+      ufw:
+        rule: deny
+        direction: in
+        from: 127.0.0.0/8
+
+    - name: Ensure incoming traffic is denied from ::1
+      ufw:
+        rule: deny
+        direction: in
+        from: ::1
+      when: firewall_ipv6_enabled
+
+
+- name: Set default action for INPUT, OUTPUT and FORWARD chains
+  block:
+    - name: Ensure INPUT default policy is to deny
+      ufw:
+        default: deny
+        direction: incoming
+
+    - name: Ensure FORWARD default policy is to deny
+      ufw:
+        default: deny
+        direction: routed
+
+    - name: Ensure OUTPUT default policy is to deny all except essencial ports
+      block:
+        - name: Ensure OUTPUT default policy is to deny
+          ufw:
+            default: "{{ firewall_output_default_action }}"
+            direction: outgoing
+
+        - name: Allow selected outgoing connections
+          ufw:
+            rule: allow
+            direction: out
+            port: "{{ item.port }}"
+            proto: "{{ item.protocol }}"
+            delete: "{{ true if firewall_output_default_action == 'allow' else false }}"
+          loop: "{{ firewall_output_allow_ports }}"
+
+      tags:
+        - configure-output-chain
+
+  tags:
+    - set-default-chain-action
+
+
+- name: Opening ports for services listed in mapping list
+  vars:
+    fsrec: "{{ firewall_services | selectattr('name', 'equalto', item.0.name) | first | default('not_found') }}"
+    ruleaction: "{{ fsrec.action | default(firewall_default_action) }}"
+  ufw:
+    rule: allow
+    port: "{{ item.1.split('/') | first }}"
+    proto: "{{ item.1.split('/') | last }}"
+  when:
+    - fsrec != 'not_found'
+    - ruleaction == 'allow'
+  loop: "{{ firewall_service_mapping | subelements('ports') }}"
+  loop_control:
+    label: "Service: {{ item.0.name }}, Port: {{ item.1 }}"
+
+- name: Closing ports for services listed in mapping list
+  vars:
+    fsrec: "{{ firewall_services | selectattr('name', 'equalto', item.0.name) | first | default('not_found') }}"
+    ruleaction: "{{ fsrec.action | default(firewall_default_action) }}"
+  ufw:
+    rule: allow
+    port: "{{ item.1.split('/') | first }}"
+    proto: "{{ item.1.split('/') | last }}"
+    delete: yes
+  when:
+    - fsrec != 'not_found'
+    - ruleaction == 'deny'
+  loop: "{{ firewall_service_mapping | subelements('ports') }}"
+  loop_control:
+    label: "Service: {{ item.0.name }}, Port: {{ item.1 }}"
+
+- name: open ports not listed in mapping list
+  vars:
+    ruleaction: "{{ item.action | default(firewall_default_action) }}"
+    fsrec: "{{ firewall_service_mapping | selectattr('name', 'equalto', item.name) | first | default('not_found') }}"
+  ufw:
+    rule: allow
+    port: "{{ item.name }}"
+    proto: "{{ item.protocol | default(firewall_default_protocol) }}"
+  loop: "{{ firewall_services }}"
+  when:
+    - fsrec == 'not_found'   # Not in the mapping list
+    - ruleaction == 'allow'
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: close ports not listed in mapping list
+  vars:
+    ruleaction: "{{ item.action | default(firewall_default_action) }}"
+    fsrec: "{{ firewall_service_mapping | selectattr('name', 'equalto', item.name) | first | default('not_found') }}"
+  ufw:
+    rule: allow
+    port: "{{ item.name }}"
+    proto: "{{ item.protocol | default(firewall_default_protocol) }}"
+    delete: yes
+  loop: "{{ firewall_services }}"
+  when:
+    - fsrec == 'not_found'   # Not in the mapping list
+    - ruleaction == 'deny'
+  loop_control:
+    label: "{{ item.name }}"
+
+
+- name: enable ufw
+  ufw:
+    state: enabled
