@@ -36,8 +36,13 @@
     enabled: no
     state: stopped
   loop: "{{ firewall_packages_conflicting }}"
-  when: (ansible_service_mgr == 'systemd' and ansible_facts['services'][item + '.service'] is defined) or
-        (ansible_service_mgr != 'systemd' and ansible_facts['services'][item] is defined)
+  when: (ansible_service_mgr == 'systemd' and
+         ansible_facts['services'][item + '.service'] is defined and
+         ansible_facts['services'][item + '.service']['status'] != 'not-found')
+        or
+        (ansible_service_mgr != 'systemd' and
+         ansible_facts['services'][item] is defined and
+         ansible_facts['services'][item]['status'] != 'not-found')
 
 - name: Test IPv6 support
   include_tasks: check_ipv6_support.yml
