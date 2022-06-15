@@ -1,27 +1,27 @@
 ---
 - name: test if firewall_selected is set correctly
-  assert:
+  ansible.builtin.assert:
     that:
       - firewall_selected is defined
       - firewall_selected in ['ufw','iptables','firewalld']
     quiet: yes
 
 - name: test if firewall_default_protocol is set correctly
-  assert:
+  ansible.builtin.assert:
     that:
       - firewall_default_protocol is defined
       - firewall_default_protocol in ["tcp", "udp"]
     quiet: yes
 
 - name: test if firewall_default_action is set correctly
-  assert:
+  ansible.builtin.assert:
     that:
       - firewall_default_action is defined
       - firewall_default_action in ["allow", "deny"]
     quiet: yes
 
 - name: test if firewall_services is set correctly
-  assert:
+  ansible.builtin.assert:
     that:
       - firewall_services is iterable
       - firewall_services | length > 0
@@ -30,7 +30,7 @@
     - firewall_services is defined
 
 - name: test if firewall_interface_zone is set correctly
-  assert:
+  ansible.builtin.assert:
     that:
       - firewall_interface_zone is iterable
       - firewall_interface_zone | length > 0
@@ -38,7 +38,7 @@
   when: firewall_interface_zone is defined
 
 - name: test if non-numeric item in firewall_services is set correctly
-  assert:
+  ansible.builtin.assert:
     that:
       - item.name is defined
       - item.name is string
@@ -52,7 +52,7 @@
     - item.name | type_debug != "int"
 
 - name: test if numeric item in firewall_services is set correctly
-  assert:
+  ansible.builtin.assert:
     that:
       - item.name is defined
       - item.name | int > 0
@@ -66,7 +66,7 @@
     - item.name | int(-1) != -1
 
 - name: test if item with action in firewall_services is set correctly
-  assert:
+  ansible.builtin.assert:
     that:
       - item.action in ["allow", "deny"]
     quiet: yes
@@ -78,7 +78,7 @@
     - item.action is defined
 
 - name: test if item with zone in firewall_services is set correctly (firewalld only)
-  assert:
+  ansible.builtin.assert:
     that:
       - item.zone | length > 0
     quiet: yes

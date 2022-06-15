@@ -4,7 +4,7 @@
 # exist, create the service.
 
 - name: Retrieve service ports if it exists
-  command: "firewall-cmd --permanent --service={{ item.name }} --get-ports"
+  ansible.builtin.command: "firewall-cmd --permanent --service={{ item.name }} --get-ports"
   failed_when: firewalld_get_ports_cmd.rc != 0 and firewalld_get_ports_cmd.rc != 101
   changed_when: false
   register: firewalld_get_ports_cmd
@@ -15,7 +15,7 @@
     firewalld_service_ports_to_remove: "{{ firewalld_service_port_list | difference(item.ports)  }}"
   block:
     - name: "Removing ports {{ firewalld_service_ports_to_remove | join(',') }} from {{ item.name }} service"
-      command: "firewall-cmd --permanent --service={{ item.name }} --remove-port={{ portitem }}"
+      ansible.builtin.command: "firewall-cmd --permanent --service={{ item.name }} --remove-port={{ portitem }}"
       register: firewalld_cmd_result
       changed_when: firewalld_cmd_result.stderr | length == 0
       loop: "{{ firewalld_service_ports_to_remove }}"
@@ -28,16 +28,16 @@
 - name: Create service if it does not exist
   block:
     - name: Create empty service
-      command: "firewall-cmd --permanent --new-service={{ item.name }}"
+      ansible.builtin.command: "firewall-cmd --permanent --new-service={{ item.name }}"
       changed_when: true
 
     - name: Add service description
-      command: "firewall-cmd --permanent --service={{ item.name }} --set-description='{{ item.description }}'"
+      ansible.builtin.command: "firewall-cmd --permanent --service={{ item.name }} --set-description='{{ item.description }}'"
       changed_when: true
       when: item.description is defined
 
     - name: Add service short description
-      command: "firewall-cmd --permanent --service={{ item.name }} --set-short='{{ item.short }}'"
+      ansible.builtin.command: "firewall-cmd --permanent --service={{ item.name }} --set-short='{{ item.short }}'"
       changed_when: true
       when: item.short is defined
   # If service do not exist the return code is 101
@@ -48,7 +48,7 @@
     firewalld_service_port_list: "{{ [] if (firewalld_get_ports_cmd.rc == 101) else
                                  firewalld_get_ports_cmd.stdout.split(' ') }}"
     firewalld_service_ports_to_add: "{{ item.ports | difference(firewalld_service_port_list) }}"
-  command: "firewall-cmd --permanent --service={{ item.name }} --add-port={{ portitem }}"
+  ansible.builtin.command: "firewall-cmd --permanent --service={{ item.name }} --add-port={{ portitem }}"
   register: firewalld_cmd_result
   changed_when: firewalld_cmd_result.stderr | length == 0
   loop: "{{ firewalld_service_ports_to_add }}"
@@ -58,9 +58,9 @@
 - name: "Display final service {{ item.name }} configuration:"
   block:
     - name: Retrieve service information
-      command: "firewall-cmd --permanent --info-service={{ item.name }}"
+      ansible.builtin.command: "firewall-cmd --permanent --info-service={{ item.name }}"
       changed_when: false
       register: firewalld_service_info
 
     - name: Display last task output
-      debug: var=firewalld_service_info.stdout_lines
+      ansible.builtin.debug: var=firewalld_service_info.stdout_lines

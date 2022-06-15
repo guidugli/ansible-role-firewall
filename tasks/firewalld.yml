@@ -4,7 +4,7 @@
 # Avoid losing connection to server. Since it is only runtime
 # it won't persist unless specified in the configuration variables.
 - name: Apply a runtime only rule to add current ssh connection
-  firewalld:
+  ansible.builtin.firewalld:
     port: "{{ ansible_port }}/tcp"
     permanent: no
     state: enabled
@@ -13,30 +13,30 @@
     - firewall_sw_install_result is changed or firewall_service_enablement_result is changed
 
 - name: Verify if provided service mapping exists on target system
-  include_tasks: firewalld_services.yml
+  ansible.builtin.include_tasks: firewalld_services.yml
   loop: "{{ firewall_service_mapping  }}"
 
 - name: Retrieve and configure firewalld default zone
   block:
     - name: Ensure default zone is set for firewalld
-      command: /usr/bin/firewall-cmd --get-default-zone
+      ansible.builtin.command: /usr/bin/firewall-cmd --get-default-zone
       changed_when: false
       register: firewalld_get_default_zone_cmd
 
     - name: Set default zone to {{ firewalld_default_zone | default('public') }}
-      command: "firewall-cmd --set-default-zone={{ firewalld_default_zone | default('public') }}"
+      ansible.builtin.command: "firewall-cmd --set-default-zone={{ firewalld_default_zone | default('public') }}"
       when:
         - firewalld_default_zone is defined
         - firewalld_get_default_zone_cmd.stdout != firewalld_default_zone
 
     # In case user did not specify a default zone
     - name: Update firewalld_default_zone if required
-      set_fact:
+      ansible.builtin.set_fact:
         firewalld_default_zone: "{{ firewalld_get_default_zone_cmd.stdout }}"
       when: firewalld_default_zone is undefined
 
 - name: open ports (firewalld-port)
-  firewalld:
+  ansible.builtin.firewalld:
     port: "{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}"
     permanent: yes
     state: enabled
@@ -53,7 +53,7 @@
     - reload firewalld
 
 - name: close ports (firewalld-port)
-  firewalld:
+  ansible.builtin.firewalld:
     port: "{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}"
     permanent: yes
     state: disabled
@@ -69,7 +69,7 @@
     - reload firewalld
 
 - name: open ports (firewalld-service)
-  firewalld:
+  ansible.builtin.firewalld:
     service: "{{ item.name }}"
     permanent: yes
     state: enabled
@@ -88,7 +88,7 @@
   vars:
     item_action: "{{ item.action | default(firewall_default_action) }}"
     item_zone: "{{ item.zone | default(firewalld_default_zone) }}"
-  firewalld:
+  ansible.builtin.firewalld:
     service: "{{ item.name }}"
     permanent: yes
     state: disabled
@@ -106,7 +106,7 @@
 - name: Configure OUTPUT chain
   block:
     - name: Add rule to allow established connections
-      command: "firewall-offline-cmd --direct --add-rule ipv4 filter OUTPUT 0 -m state --state ESTABLISHED,RELATED -j ACCEPT"  # yamllint disable-line rule:line-length
+      ansible.builtin.command: "firewall-offline-cmd --direct --add-rule ipv4 filter OUTPUT 0 -m state --state ESTABLISHED,RELATED -j ACCEPT"  # yamllint disable-line rule:line-length
       changed_when: firewall_output_cmd.stderr | length == 0
       register: firewall_output_cmd
       when: firewall_output_default_action == 'deny'
@@ -114,7 +114,7 @@
         - reload firewalld
 
     - name: Add rules to allow outgoing connection for selected ports
-      command: "firewall-offline-cmd --direct --add-rule ipv4 filter OUTPUT 1 -p {{ item.protocol }} -m {{ item.protocol }} --dport {{ item.port }} -j ACCEPT"  # yamllint disable-line rule:line-length
+      ansible.builtin.command: "firewall-offline-cmd --direct --add-rule ipv4 filter OUTPUT 1 -p {{ item.protocol }} -m {{ item.protocol }} --dport {{ item.port }} -j ACCEPT"  # yamllint disable-line rule:line-length
       changed_when: firewall_output_cmd.stderr | length == 0
       register: firewall_output_cmd
       loop: "{{ firewall_output_allow_ports }}"
@@ -123,7 +123,7 @@
         - reload firewalld
 
     - name: Add rule to deny all traffic that do not match previous rules
-      command: "firewall-offline-cmd --direct --add-rule ipv4 filter OUTPUT 2 -j DROP"
+      ansible.builtin.command: "firewall-offline-cmd --direct --add-rule ipv4 filter OUTPUT 2 -j DROP"
       changed_when: firewall_output_cmd.stderr | length == 0
       register: firewall_output_cmd
       when: firewall_output_default_action == 'deny'
@@ -131,7 +131,7 @@
         - reload firewalld
 
     - name: Add rule to allow established connections
-      command: "firewall-offline-cmd --direct --remove-rule ipv4 filter OUTPUT 0 -m state --state ESTABLISHED,RELATED -j ACCEPT"  # yamllint disable-line rule:line-length
+      ansible.builtin.command: "firewall-offline-cmd --direct --remove-rule ipv4 filter OUTPUT 0 -m state --state ESTABLISHED,RELATED -j ACCEPT"  # yamllint disable-line rule:line-length
       changed_when: firewall_output_cmd.rc == 0
       failed_when: firewall_output_cmd.rc not in [0,2]
       register: firewall_output_cmd
@@ -140,7 +140,7 @@
         - reload firewalld
 
     - name: Add rules to allow outgoing connection for selected ports
-      command: >
+      ansible.builtin.command: >
         firewall-offline-cmd --direct --remove-rule ipv4 filter OUTPUT 1
          -p {{ item.protocol }} -m {{ item.protocol }} --dport {{ item.port }} -j ACCEPT
       changed_when: firewall_output_cmd.stderr | length == 0
@@ -152,7 +152,7 @@
         - reload firewalld
 
     - name: Add rule to deny all traffic that do not match previous rules
-      command: "firewall-offline-cmd --direct --remove-rule ipv4 filter OUTPUT 2 -j DROP"
+      ansible.builtin.command: "firewall-offline-cmd --direct --remove-rule ipv4 filter OUTPUT 2 -j DROP"
       changed_when: firewall_output_cmd.stderr | length == 0
       failed_when: firewall_output_cmd.rc not in [0,2]
       register: firewall_output_cmd
@@ -161,7 +161,7 @@
         - reload firewalld
 
 - name: Set zones for network devices
-  firewalld:
+  ansible.builtin.firewalld:
     zone: "{{ item.zone }}"
     interface: "{{ item.interface }}"
     permanent: yes
@@ -169,13 +169,13 @@
   loop: "{{ firewall_interface_zone | default([]) }}"
 
 - name: Force flush handlers
-  meta: flush_handlers
+  ansible.builtin.meta: flush_handlers
 
 - name: Display effective configuration after tasks
-  command: "firewall-offline-cmd --list-all-zones"
+  ansible.builtin.command: "firewall-offline-cmd --list-all-zones"
   register: firewall_output_cmd
   changed_when: false
 
 - name: Show last task output
-  debug:
+  ansible.builtin.debug:
     msg: "{{ firewall_output_cmd.stdout_lines }}"

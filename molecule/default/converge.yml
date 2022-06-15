@@ -1,6 +1,5 @@
 ---
 - name: Converge
-  user: root
   hosts: all
   vars:
     firewall_selected: "{{ _suggested_os_firewall }}"
@@ -36,15 +35,15 @@
         action: deny
 
   pre_tasks:
-#    - name: update RedHat systems running yum
-#      yum:
-#        name: "*"
-#        state: latest
-#      when: ansible_pkg_mgr in ['yum', 'dnf']
+    - name: update RedHat systems running yum
+      ansible.builtin.yum:
+        name: "*"
+        state: latest
+      when: ansible_pkg_mgr in ['yum', 'dnf']
 
     # add sysctl for testing since containers dont have it
     - name: update Ubuntu/Debian systems
-      apt:
+      ansible.builtin.apt:
 #        upgrade: dist
         name: procps
         update_cache: true
@@ -52,11 +51,11 @@
       when: ansible_pkg_mgr == "apt"
 
     - name: Install missing RedHat container packages
-      yum:
+      ansible.builtin.yum:
         state: latest
         name:
           - procps-ng
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
   roles:
-    - role: guidugli.firewall
+    - guidugli.firewall
