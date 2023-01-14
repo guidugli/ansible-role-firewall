@@ -8,7 +8,7 @@
     firewall_services: "{{ firewall_services | default([], true) }}"
 
 # tasks file for firewall
-- name: include assert.yml
+- name: Include assert.yml
   ansible.builtin.include_tasks: assert.yml
   run_once: yes
 
@@ -21,7 +21,7 @@
       - "Ansible service manager: {{ ansible_service_mgr | default('Not Specified') }}"
       - "ansible_facts['services']: {{ ansible_facts['services'] | default('Not Specified') }}"
 
-- name: install required software
+- name: Install required software
   ansible.builtin.package:
     name: "{{ firewall_packages_required }}"
     state: present
@@ -30,7 +30,7 @@
   when:
     - firewall_packages_required is defined
 
-- name: disable conflicting firewall services
+- name: Disable conflicting firewall services
   ansible.builtin.service:
     name: "{{ item }}"
     enabled: no

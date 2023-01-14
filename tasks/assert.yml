@@ -1,26 +1,26 @@
 ---
-- name: test if firewall_selected is set correctly
+- name: Test if firewall_selected is set correctly
   ansible.builtin.assert:
     that:
       - firewall_selected is defined
       - firewall_selected in ['ufw','iptables','firewalld']
     quiet: yes
 
-- name: test if firewall_default_protocol is set correctly
+- name: Test if firewall_default_protocol is set correctly
   ansible.builtin.assert:
     that:
       - firewall_default_protocol is defined
       - firewall_default_protocol in ["tcp", "udp"]
     quiet: yes
 
-- name: test if firewall_default_action is set correctly
+- name: Test if firewall_default_action is set correctly
   ansible.builtin.assert:
     that:
       - firewall_default_action is defined
       - firewall_default_action in ["allow", "deny"]
     quiet: yes
 
-- name: test if firewall_services is set correctly
+- name: Test if firewall_services is set correctly
   ansible.builtin.assert:
     that:
       - firewall_services is iterable
@@ -29,7 +29,7 @@
   when:
     - firewall_services is defined
 
-- name: test if firewall_interface_zone is set correctly
+- name: Test if firewall_interface_zone is set correctly
   ansible.builtin.assert:
     that:
       - firewall_interface_zone is iterable
@@ -37,7 +37,7 @@
     quiet: yes
   when: firewall_interface_zone is defined
 
-- name: test if non-numeric item in firewall_services is set correctly
+- name: Test if non-numeric item in firewall_services is set correctly
   ansible.builtin.assert:
     that:
       - item.name is defined
@@ -51,7 +51,7 @@
     - firewall_services is defined
     - item.name | type_debug != "int"
 
-- name: test if numeric item in firewall_services is set correctly
+- name: Test if numeric item in firewall_services is set correctly
   ansible.builtin.assert:
     that:
       - item.name is defined
@@ -65,7 +65,7 @@
     - firewall_services is defined
     - item.name | int(-1) != -1
 
-- name: test if item with action in firewall_services is set correctly
+- name: Test if item with action in firewall_services is set correctly
   ansible.builtin.assert:
     that:
       - item.action in ["allow", "deny"]
@@ -77,7 +77,7 @@
     - firewall_services is defined
     - item.action is defined
 
-- name: test if item with zone in firewall_services is set correctly (firewalld only)
+- name: Test if item with zone in firewall_services is set correctly (firewalld only)
   ansible.builtin.assert:
     that:
       - item.zone | length > 0

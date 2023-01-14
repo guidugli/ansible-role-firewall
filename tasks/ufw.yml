@@ -29,6 +29,8 @@
 
 
 - name: Set default action for INPUT, OUTPUT and FORWARD chains
+  tags:
+    - set-default-chain-action
   block:
     - name: Ensure INPUT default policy is to deny
       ansible.builtin.ufw:
@@ -41,6 +43,8 @@
         direction: routed
 
     - name: Ensure OUTPUT default policy is to deny all except essencial ports
+      tags:
+        - configure-output-chain
       block:
         - name: Ensure OUTPUT default policy is to deny
           ansible.builtin.ufw:
@@ -55,13 +59,6 @@
             proto: "{{ item.protocol }}"
             delete: "{{ true if firewall_output_default_action == 'allow' else false }}"
           loop: "{{ firewall_output_allow_ports }}"
-
-      tags:
-        - configure-output-chain
-
-  tags:
-    - set-default-chain-action
-
 
 - name: Opening ports for services listed in mapping list
   vars:
@@ -94,7 +91,7 @@
   loop_control:
     label: "Service: {{ item.0.name }}, Port: {{ item.1 }}"
 
-- name: open ports not listed in mapping list
+- name: Open ports not listed in mapping list
   vars:
     ruleaction: "{{ item.action | default(firewall_default_action) }}"
     fsrec: "{{ firewall_service_mapping | selectattr('name', 'equalto', item.name) | first | default('not_found') }}"
@@ -109,7 +106,7 @@
   loop_control:
     label: "{{ item.name }}"
 
-- name: close ports not listed in mapping list
+- name: Close ports not listed in mapping list
   vars:
     ruleaction: "{{ item.action | default(firewall_default_action) }}"
     fsrec: "{{ firewall_service_mapping | selectattr('name', 'equalto', item.name) | first | default('not_found') }}"
@@ -126,6 +123,6 @@
     label: "{{ item.name }}"
 
 
-- name: enable ufw
+- name: Enable ufw
   ansible.builtin.ufw:
     state: enabled
