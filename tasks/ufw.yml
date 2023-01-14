@@ -3,25 +3,25 @@
 - name: Configure loopback to prevent spoofing
   block:
     - name: Ensure incoming traffic from loopback is allowed
-      ansible.builtin.ufw:
+      community.general.ufw:
         rule: allow
         interface: lo
         direction: in
 
     - name: Ensure outgoing traffic from loopback is allowed
-      ansible.builtin.ufw:
+      community.general.ufw:
         rule: allow
         interface: lo
         direction: out
 
     - name: Ensure incoming traffic is denied from 127.0.0.0/8
-      ansible.builtin.ufw:
+      community.general.ufw:
         rule: deny
         direction: in
         from: 127.0.0.0/8
 
     - name: Ensure incoming traffic is denied from ::1
-      ansible.builtin.ufw:
+      community.general.ufw:
         rule: deny
         direction: in
         from: ::1
@@ -33,12 +33,12 @@
     - set-default-chain-action
   block:
     - name: Ensure INPUT default policy is to deny
-      ansible.builtin.ufw:
+      community.general.ufw:
         default: deny
         direction: incoming
 
     - name: Ensure FORWARD default policy is to deny
-      ansible.builtin.ufw:
+      community.general.ufw:
         default: deny
         direction: routed
 
@@ -47,12 +47,12 @@
         - configure-output-chain
       block:
         - name: Ensure OUTPUT default policy is to deny
-          ansible.builtin.ufw:
+          community.general.ufw:
             default: "{{ firewall_output_default_action }}"
             direction: outgoing
 
         - name: Allow selected outgoing connections
-          ansible.builtin.ufw:
+          community.general.ufw:
             rule: allow
             direction: out
             port: "{{ item.port }}"
@@ -64,7 +64,7 @@
   vars:
     fsrec: "{{ firewall_services | selectattr('name', 'equalto', item.0.name) | first | default('not_found') }}"
     ruleaction: "{{ fsrec.action | default(firewall_default_action) }}"
-  ansible.builtin.ufw:
+  community.general.ufw:
     rule: allow
     port: "{{ item.1.split('/') | first }}"
     proto: "{{ item.1.split('/') | last }}"
@@ -79,7 +79,7 @@
   vars:
     fsrec: "{{ firewall_services | selectattr('name', 'equalto', item.0.name) | first | default('not_found') }}"
     ruleaction: "{{ fsrec.action | default(firewall_default_action) }}"
-  ansible.builtin.ufw:
+  community.general.ufw:
     rule: allow
     port: "{{ item.1.split('/') | first }}"
     proto: "{{ item.1.split('/') | last }}"
@@ -95,7 +95,7 @@
   vars:
     ruleaction: "{{ item.action | default(firewall_default_action) }}"
     fsrec: "{{ firewall_service_mapping | selectattr('name', 'equalto', item.name) | first | default('not_found') }}"
-  ansible.builtin.ufw:
+  community.general.ufw:
     rule: allow
     port: "{{ item.name }}"
     proto: "{{ item.protocol | default(firewall_default_protocol) }}"
@@ -110,7 +110,7 @@
   vars:
     ruleaction: "{{ item.action | default(firewall_default_action) }}"
     fsrec: "{{ firewall_service_mapping | selectattr('name', 'equalto', item.name) | first | default('not_found') }}"
-  ansible.builtin.ufw:
+  community.general.ufw:
     rule: allow
     port: "{{ item.name }}"
     proto: "{{ item.protocol | default(firewall_default_protocol) }}"
@@ -124,5 +124,5 @@
 
 
 - name: Enable ufw
-  ansible.builtin.ufw:
+  community.general.ufw:
     state: enabled

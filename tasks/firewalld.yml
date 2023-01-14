@@ -4,7 +4,7 @@
 # Avoid losing connection to server. Since it is only runtime
 # it won't persist unless specified in the configuration variables.
 - name: Apply a runtime only rule to add current ssh connection
-  ansible.builtin.firewalld:
+  ansible.posix.firewalld:
     port: "{{ ansible_port }}/tcp"
     permanent: no
     state: enabled
@@ -36,7 +36,7 @@
       when: firewalld_default_zone is undefined
 
 - name: Open ports (firewalld-port)
-  ansible.builtin.firewalld:
+  ansible.posix.firewalld:
     port: "{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}"
     permanent: yes
     state: enabled
@@ -52,8 +52,8 @@
   notify:
     - Reload firewalld
 
-- name: close ports (firewalld-port)
-  ansible.builtin.firewalld:
+- name: Close ports (firewalld-port)
+  ansible.posix.firewalld:
     port: "{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}"
     permanent: yes
     state: disabled
@@ -68,8 +68,8 @@
   notify:
     - Reload firewalld
 
-- name: open ports (firewalld-service)
-  ansible.builtin.firewalld:
+- name: Open ports (firewalld-service)
+  ansible.posix.firewalld:
     service: "{{ item.name }}"
     permanent: yes
     state: enabled
@@ -84,11 +84,11 @@
   notify:
     - Reload firewalld
 
-- name: close ports (firewalld-service)
+- name: Close ports (firewalld-service)
   vars:
     item_action: "{{ item.action | default(firewall_default_action) }}"
     item_zone: "{{ item.zone | default(firewalld_default_zone) }}"
-  ansible.builtin.firewalld:
+  ansible.posix.firewalld:
     service: "{{ item.name }}"
     permanent: yes
     state: disabled
@@ -161,7 +161,7 @@
         - Reload firewalld
 
 - name: Set zones for network devices
-  ansible.builtin.firewalld:
+  ansible.posix.firewalld:
     zone: "{{ item.zone }}"
     interface: "{{ item.interface }}"
     permanent: yes
