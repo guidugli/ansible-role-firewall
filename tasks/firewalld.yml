@@ -14,7 +14,7 @@
 
 - name: Verify if provided service mapping exists on target system
   ansible.builtin.include_tasks: firewalld_services.yml
-  loop: "{{ firewall_service_mapping  }}"
+  loop: "{{ firewall_service_mapping }}"
 
 - name: Retrieve and configure firewalld default zone
   block:
