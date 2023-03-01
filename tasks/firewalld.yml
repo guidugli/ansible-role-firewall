@@ -25,6 +25,7 @@
 
     - name: Set default zone to {{ firewalld_default_zone | default('public') }}
       ansible.builtin.command: "firewall-cmd --set-default-zone={{ firewalld_default_zone | default('public') }}"
+      changed_when: true
       when:
         - firewalld_default_zone is defined
         - firewalld_get_default_zone_cmd.stdout != firewalld_default_zone
