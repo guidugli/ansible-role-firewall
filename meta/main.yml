@@ -16,8 +16,9 @@ galaxy_info:
         - '7'
     - name: Fedora
       versions:
-        - '36'
+        - '38'
         - '37'
+        - '36'
     - name: Ubuntu
       versions:
         - jammy

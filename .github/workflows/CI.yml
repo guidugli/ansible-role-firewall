@@ -51,8 +51,9 @@ jobs:
           - ubuntu1804
           - debian11
           - debian10
-          - fedora36
+          - fedora38
           - fedora37
+          - fedora36
 
     steps:
       - name: Check out the codebase.
