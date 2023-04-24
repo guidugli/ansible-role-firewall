@@ -32,6 +32,7 @@ _iptables_info:
   packages:
     default: ['iptables']
     RedHat: ['iptables-services']
+    Rocky: ['iptables-services']
   service_name:
     default: iptables
   ipv6_service_name:
@@ -47,6 +48,7 @@ _iptables_info:
 _preferred_os_firewall:
   default: iptables
   RedHat: firewalld
+  Rocky: firewalld
   CentOS: firewalld
   Fedora: firewalld
   Debian: ufw
