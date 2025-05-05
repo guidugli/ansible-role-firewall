@@ -1,16 +1,17 @@
 ---
+role_name_check: 1
 dependency:
   name: galaxy
 driver:
   name: ${MDRIVER:-podman}
 platforms:
   - name: instance
-    image: docker.io/geerlingguy/docker-${MOLECULE_DISTRO:-centos8}-ansible:latest
-    privileged: true
+    image: docker.io/geerlingguy/docker-${MOLECULE_DISTRO:-fedora42}-ansible:latest
+    command: ${MOLECULE_DOCKER_COMMAND:-""}
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
     cgroupns_mode: host
-    command: ${MOLECULE_DOCKER_COMMAND:-""}
+    privileged: true
     pre_build_image: true
 provisioner:
   name: ansible

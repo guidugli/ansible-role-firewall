@@ -1,0 +1,27 @@
+---
+- name: Prepare
+  hosts: all
+  tasks:
+
+    - name: Update Ubuntu/Debian systems
+      ansible.builtin.apt:
+#        upgrade: dist
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_pkg_mgr == "apt"
+
+    # add sysctl for testing since containers dont have it
+    - name: Update Ubuntu/Debian systems
+      ansible.builtin.apt:
+#        upgrade: dist
+        name: procps
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_pkg_mgr == "apt"
+
+    - name: Install missing RedHat container packages
+      ansible.builtin.yum:
+        state: latest
+        name:
+          - procps-ng
+      when: ansible_pkg_mgr in ['yum', 'dnf', 'dnf5']
