@@ -6,7 +6,7 @@ driver:
   name: ${MDRIVER:-podman}
 platforms:
   - name: instance
-    image: docker.io/geerlingguy/docker-${MOLECULE_DISTRO:-fedora42}-ansible:latest
+    image: docker.io/geerlingguy/docker-${MOLECULE_DISTRO:-fedora43}-ansible:latest
     command: ${MOLECULE_DOCKER_COMMAND:-""}
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
