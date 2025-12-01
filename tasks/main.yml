@@ -1,18 +1,21 @@
 ---
 
-# Prevent errors, skipping tasks without having to
-# add 'when: firewall_services is defined' on several
-# tasks
-- name: Set firewall_services as empty list if not defined
-  ansible.builtin.set_fact:
-    firewall_services: "{{ firewall_services | default([], true) }}"
+- name: Starting firewall role
+  block:
 
-# tasks file for firewall
-- name: Include assert.yml
-  ansible.builtin.include_tasks: assert.yml
-  run_once: yes
-
-- name: Import tasks to start configuration
+    # Prevent errors, skipping tasks without having to
+    # add 'when: firewall_services is defined' on several
+    # tasks
+    - name: Set firewall_services as empty list if not defined
+      ansible.builtin.set_fact:
+        firewall_services: "{{ firewall_services | default([], true) }}"
+    
+    # tasks file for firewall
+    - name: Include assert.yml
+      ansible.builtin.include_tasks: assert.yml
+      run_once: yes
+    
+    - name: Import tasks to start configuration
+      ansible.builtin.include_tasks: start.yml
+    
   become: yes
-  ansible.builtin.include_tasks: start.yml
-
