@@ -22,6 +22,7 @@
       - "ansible_facts['services']: {{ ansible_facts['services'] | default('Not Specified') }}"
 
 - name: Install required software
+  become: yes
   ansible.builtin.package:
     name: "{{ firewall_packages_required }}"
     state: present
@@ -31,6 +32,7 @@
     - firewall_packages_required is defined
 
 - name: Disable conflicting firewall services
+  become: yes
   ansible.builtin.service:
     name: "{{ item }}"
     enabled: no
@@ -49,11 +51,13 @@
   run_once: yes
 
 - name: Show IPv6 Support Status
+  become: yes
   ansible.builtin.debug:
     msg: "IPv6 Support: {{ 'enabled' if firewall_ipv6_enabled else 'disabled' }}"
 
 # Set the configuration before loading the service
 - name: Configuring UFW to not use IPv6 since support is disabled
+  become: yes
   ansible.builtin.lineinfile:
     path: /etc/default/ufw
     regexp: '^IPV6=yes'
@@ -63,6 +67,7 @@
     - firewall_selected == "ufw"
 
 - name: Ensure ipv4 service is enabled and started
+  become: yes
   ansible.builtin.service:
     name: "{{ firewall_ipv4_service_name }}"
     state: started
@@ -70,6 +75,7 @@
   register: firewall_service_enablement_result
 
 - name: Ensure ipv6 service is enabled and started (iptables only)
+  become: yes
   ansible.builtin.service:
     name: "{{ firewall_ipv6_service_name }}"
     state: started
@@ -80,4 +86,5 @@
 
 # Firewalld needs systemd to run, so skip if that is the case
 - name: Run firewall software specific tasks
+  become: yes
   ansible.builtin.include_tasks: "{{ firewall_selected }}.yml"
