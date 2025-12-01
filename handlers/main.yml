@@ -1,12 +1,14 @@
 ---
 # handlers file for firewall
 - name: Reload firewall ipv4 service
+  become: yes
   ansible.builtin.service:
     name: "{{ firewall_ipv4_service_name }}"
     state: reloaded
   listen: reload firewall
 
 - name: Reload firewall ipv6 service
+  become: yes
   ansible.builtin.service:
     name: "{{ firewall_ipv6_service_name }}"
     state: reloaded
@@ -16,4 +18,5 @@
     - firewall_ipv6_enabled
 
 - name: Reload firewalld
+  become: yes
   ansible.builtin.command: firewall-cmd --reload
