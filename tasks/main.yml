@@ -14,5 +14,5 @@
 
 - name: Import tasks to start configuration
   become: yes
-  ansible.builtin.import_tasks: start.yml
+  ansible.builtin.include_tasks: start.yml
 
