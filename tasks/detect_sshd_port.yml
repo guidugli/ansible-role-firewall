@@ -43,8 +43,9 @@
 - name: Set inventory ansible_port to default
   ansible.builtin.set_fact:
     ansible_port: "22"
-  when: default_ssh is defined and
-        not default_ssh.failed
+  when:
+    - default_ssh is defined
+    - not default_ssh.failed
   register: ssh_port_set
 
 # If unreachable on port 22, check if we're able to reach
