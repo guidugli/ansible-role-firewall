@@ -1,10 +1,8 @@
 ---
 
- - name: Run tasks to detect SSH Port
-   gather_facts: no
-   ansible.builtin.include_tasks: detect_sshd_port.yml
-   when: ansible_connection in ["ssh", "paramiko"]
-
+- name: Run tasks to detect SSH Port
+  ansible.builtin.include_tasks: detect_sshd_port.yml
+  when: ansible_connection | default("ssh") in ["ssh", "paramiko"]
 
 - name: Starting firewall role
   block:
