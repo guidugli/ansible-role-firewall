@@ -3,6 +3,10 @@
 - name: Starting firewall role
   block:
 
+    - name: Run tasks to detect SSH Port
+      ansible.builtin.import_tasks: detect_sshd_port.yml
+      when: ansible_connection == 'ssh'
+
     # Prevent errors, skipping tasks without having to
     # add 'when: firewall_services is defined' on several
     # tasks
