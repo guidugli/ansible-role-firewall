@@ -170,7 +170,6 @@
     state: enabled
   when:
     - ansible_port is defined
-    - firewall_sw_install_result is changed or firewall_service_enablement_result is changed
 
 - name: Display effective configuration after tasks
   ansible.builtin.command: "firewall-offline-cmd --list-all-zones"
