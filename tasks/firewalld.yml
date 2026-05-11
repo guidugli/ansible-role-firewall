@@ -1,17 +1,6 @@
 ---
 # Tasks for firewalld firewall implementation and configuration
 
-# Avoid losing connection to server. Since it is only runtime
-# it won't persist unless specified in the configuration variables.
-- name: Apply a runtime only rule to add current ssh connection
-  ansible.posix.firewalld:
-    port: "{{ ansible_port }}/tcp"
-    permanent: no
-    state: enabled
-  when:
-    - ansible_port is defined
-    - firewall_sw_install_result is changed or firewall_service_enablement_result is changed
-
 - name: Verify if provided service mapping exists on target system
   ansible.builtin.include_tasks: firewalld_services.yml
   loop: "{{ firewall_service_mapping }}"
@@ -171,6 +160,17 @@
 
 - name: Force flush handlers
   ansible.builtin.meta: flush_handlers
+
+# Avoid losing connection to server. Since it is only runtime
+# it won't persist unless specified in the configuration variables.
+- name: Apply a runtime only rule to add current ssh connection
+  ansible.posix.firewalld:
+    port: "{{ ansible_port }}/tcp"
+    permanent: no
+    state: enabled
+  when:
+    - ansible_port is defined
+    - firewall_sw_install_result is changed or firewall_service_enablement_result is changed
 
 - name: Display effective configuration after tasks
   ansible.builtin.command: "firewall-offline-cmd --list-all-zones"
