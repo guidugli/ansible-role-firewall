@@ -1,6 +1,8 @@
 ---
 - name: Converge
   hosts: all
+  gather_facts: true
+  become: false
   vars:
     firewall_selected: "{{ _suggested_os_firewall }}"
     firewalld_default_zone: public
@@ -33,6 +35,5 @@
         action: deny
       - name: dhcpv6-client
         action: deny
-
   roles:
-    - guidugli.firewall
+    - role: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"

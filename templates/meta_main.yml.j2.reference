@@ -1,0 +1,33 @@
+---
+# Generated file. Do not edit directly.
+# Source template: {{ template_name }}
+
+dependencies: []
+galaxy_info:
+  role_name: audit
+  namespace: guidugli
+  author: guidugli
+  company: Creuzo Tech
+  description: >-
+    Install and configure Linux auditd, deploy reusable audit rules, and keep
+    release metadata aligned with the shared Molecule platform matrix.
+  license: MIT
+  min_ansible_version: '2.14'
+  platforms:
+{% for platform in platforms %}
+    - name: {{ platform.name }}
+      versions:
+{%   for version in platform.versions %}
+        - {{ version | tojson }}
+{%   endfor %}
+{% endfor %}
+  galaxy_tags:
+    - audit
+    - auditd
+    - linux
+    - security
+    - compliance
+    - hardening
+    - logging
+    - cis
+    - monitoring

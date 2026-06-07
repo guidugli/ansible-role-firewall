@@ -1,128 +1,186 @@
 ---
-
-- name: Configure loopback to prevent spoofing
+- name: Configure loopback protection rules
   block:
-    - name: Ensure incoming traffic from loopback is allowed
+    - name: Allow incoming loopback traffic
       community.general.ufw:
         rule: allow
         interface: lo
         direction: in
 
-    - name: Ensure outgoing traffic from loopback is allowed
+    - name: Allow outgoing loopback traffic
       community.general.ufw:
         rule: allow
         interface: lo
         direction: out
 
-    - name: Ensure incoming traffic is denied from 127.0.0.0/8
+    - name: Deny spoofed IPv4 loopback traffic
       community.general.ufw:
         rule: deny
         direction: in
         from: 127.0.0.0/8
 
-    - name: Ensure incoming traffic is denied from ::1
+    - name: Deny spoofed IPv6 loopback traffic
       community.general.ufw:
         rule: deny
         direction: in
         from: ::1
-      when: firewall_ipv6_enabled
+      when:
+        - firewall_ipv6_enabled | default(false)
+  tags: [config]
 
-
-- name: Set default action for INPUT, OUTPUT and FORWARD chains
-  tags:
-    - set-default-chain-action
+- name: Set UFW default policies
   block:
-    - name: Ensure INPUT default policy is to deny
+    - name: Deny incoming traffic by default
       community.general.ufw:
         default: deny
         direction: incoming
 
-    - name: Ensure FORWARD default policy is to deny
+    - name: Deny routed traffic by default
       community.general.ufw:
         default: deny
         direction: routed
 
-    - name: Ensure OUTPUT default policy is to deny all except essencial ports
-      tags:
-        - configure-output-chain
-      block:
-        - name: Ensure OUTPUT default policy is to deny
-          community.general.ufw:
-            default: "{{ firewall_output_default_action }}"
-            direction: outgoing
+    - name: Set outgoing default policy
+      community.general.ufw:
+        default: "{{ firewall_output_default_action }}"
+        direction: outgoing
+  tags: [config]
 
-        - name: Allow selected outgoing connections
-          community.general.ufw:
-            rule: allow
-            direction: out
-            port: "{{ item.port }}"
-            proto: "{{ item.protocol }}"
-            delete: "{{ true if firewall_output_default_action == 'allow' else false }}"
-          loop: "{{ firewall_output_allow_ports }}"
-
-- name: Opening ports for services listed in mapping list
-  vars:
-    fsrec: "{{ firewall_services | selectattr('name', 'equalto', item.0.name) | first | default('not_found') }}"
-    ruleaction: "{{ fsrec.action | default(firewall_default_action) }}"
+- name: Allow selected outgoing ports when default output is deny
   community.general.ufw:
     rule: allow
-    port: "{{ item.1.split('/') | first }}"
-    proto: "{{ item.1.split('/') | last }}"
-  when:
-    - fsrec != 'not_found'
-    - ruleaction == 'allow'
-  loop: "{{ firewall_service_mapping | subelements('ports') }}"
+    direction: out
+    port: "{{ item.port }}"
+    proto: "{{ item.protocol }}"
+  loop: "{{ firewall_output_allow_ports }}"
   loop_control:
-    label: "Service: {{ item.0.name }}, Port: {{ item.1 }}"
+    label: "{{ item.port }}/{{ item.protocol }}"
+  when:
+    - firewall_output_default_action == 'deny'
+  tags: [config]
 
-- name: Closing ports for services listed in mapping list
-  vars:
-    fsrec: "{{ firewall_services | selectattr('name', 'equalto', item.0.name) | first | default('not_found') }}"
-    ruleaction: "{{ fsrec.action | default(firewall_default_action) }}"
+- name: Remove explicit outgoing allow rules when default output is allow
   community.general.ufw:
     rule: allow
-    port: "{{ item.1.split('/') | first }}"
-    proto: "{{ item.1.split('/') | last }}"
-    delete: yes
+    direction: out
+    port: "{{ item.port }}"
+    proto: "{{ item.protocol }}"
+    delete: true
+  loop: "{{ firewall_output_allow_ports }}"
+  loop_control:
+    label: "{{ item.port }}/{{ item.protocol }}"
   when:
-    - fsrec != 'not_found'
-    - ruleaction == 'deny'
+    - firewall_output_default_action == 'allow'
+  tags: [config]
+
+- name: Allow mapped service ports with UFW
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.1.split('/')[0] }}"
+    proto: "{{ item.1.split('/')[1] }}"
   loop: "{{ firewall_service_mapping | subelements('ports') }}"
   loop_control:
-    label: "Service: {{ item.0.name }}, Port: {{ item.1 }}"
-
-- name: Open ports not listed in mapping list
+    label: "{{ item.0.name }} -> {{ item.1 }}"
   vars:
-    ruleaction: "{{ item.action | default(firewall_default_action) }}"
-    fsrec: "{{ firewall_service_mapping | selectattr('name', 'equalto', item.name) | first | default('not_found') }}"
+    service_record: >-
+      {{
+        firewall_services
+        | selectattr('name', 'equalto', item.0.name)
+        | first
+        | default({})
+      }}
+  when:
+    - service_record != {}
+    - service_record.action | default(firewall_default_action) == 'allow'
+  tags: [config]
+
+- name: Remove mapped service ports when service action is deny
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.1.split('/')[0] }}"
+    proto: "{{ item.1.split('/')[1] }}"
+    delete: true
+  loop: "{{ firewall_service_mapping | subelements('ports') }}"
+  loop_control:
+    label: "{{ item.0.name }} -> {{ item.1 }}"
+  vars:
+    service_record: >-
+      {{
+        firewall_services
+        | selectattr('name', 'equalto', item.0.name)
+        | first
+        | default({})
+      }}
+  when:
+    - service_record != {}
+    - service_record.action | default(firewall_default_action) == 'deny'
+  tags: [config]
+
+- name: Allow direct service or port entries with UFW
   community.general.ufw:
     rule: allow
     port: "{{ item.name }}"
     proto: "{{ item.protocol | default(firewall_default_protocol) }}"
   loop: "{{ firewall_services }}"
-  when:
-    - fsrec == 'not_found'   # Not in the mapping list
-    - ruleaction == 'allow'
   loop_control:
     label: "{{ item.name }}"
-
-- name: Close ports not listed in mapping list
   vars:
-    ruleaction: "{{ item.action | default(firewall_default_action) }}"
-    fsrec: "{{ firewall_service_mapping | selectattr('name', 'equalto', item.name) | first | default('not_found') }}"
+    mapped_service: >-
+      {{
+        firewall_service_mapping
+        | selectattr('name', 'equalto', item.name)
+        | first
+        | default({})
+      }}
+  when:
+    - mapped_service == {}
+    - item.action | default(firewall_default_action) == 'allow'
+  tags: [config]
+
+- name: Remove direct service or port entries when action is deny
   community.general.ufw:
     rule: allow
     port: "{{ item.name }}"
     proto: "{{ item.protocol | default(firewall_default_protocol) }}"
-    delete: yes
+    delete: true
   loop: "{{ firewall_services }}"
-  when:
-    - fsrec == 'not_found'   # Not in the mapping list
-    - ruleaction == 'deny'
   loop_control:
     label: "{{ item.name }}"
+  vars:
+    mapped_service: >-
+      {{
+        firewall_service_mapping
+        | selectattr('name', 'equalto', item.name)
+        | first
+        | default({})
+      }}
+  when:
+    - mapped_service == {}
+    - item.action | default(firewall_default_action) == 'deny'
+  tags: [config]
 
+- name: Determine whether UFW activation should be skipped
+  ansible.builtin.set_fact:
+    firewall_skip_ufw_enable: >-
+      {{
+        ansible_facts['virtualization_type'] | default('') in _container_types
+        and ansible_facts['virtualization_role'] | default('guest') == 'guest'
+      }}
+  tags: [config]
 
-- name: Enable ufw
+- name: Explain why UFW enable is skipped
+  ansible.builtin.debug:
+    msg: >-
+      Skipping UFW enable on a container guest because ufw -f enable may fail
+      when sysctl changes are restricted by the container runtime.
+  when:
+    - firewall_skip_ufw_enable
+  changed_when: false
+  tags: [config]
+
+- name: Ensure UFW is enabled
   community.general.ufw:
     state: enabled
+  when:
+    - not firewall_skip_ufw_enable
+  tags: [config]

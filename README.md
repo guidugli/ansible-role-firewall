@@ -1,166 +1,191 @@
-Ansible Role: firewall
-=========
+# Ansible Role: firewall
 
-An Ansible Role that install and configure firewalld or ufw on RHEL/CentOS, Fedora and Debian/Ubuntu.
+[![CI](https://github.com/guidugli/ansible-role-firewall/actions/workflows/CI.yml/badge.svg)](https://github.com/guidugli/ansible-role-firewall/actions/workflows/CI.yml)
+[![Release](https://github.com/guidugli/ansible-role-firewall/actions/workflows/release.yml/badge.svg)](https://github.com/guidugli/ansible-role-firewall/actions/workflows/release.yml)
+[![Galaxy](https://img.shields.io/badge/galaxy-guidugli.firewall-blue.svg)](https://galaxy.ansible.com/ui/standalone/roles/guidugli/firewall/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Requirements
-------------
+## Overview
 
-No requirements.
+This role installs and configures a host firewall using either **firewalld** or **ufw** on the supported platforms declared in `meta/main.yml`.
 
-Role Variables
---------------
+The role follows a modernized structure with:
 
-> Please remember that this role:
->    - Assumes/Set default INPUT and FORWARD actions as deny.
->    - Default OUTPUT action is configured by firewall_block_all_output var
->    - is target for internal servers needing basic rules, so no forwarding rules can be implemented here
->    - will configure loopback on UFW as:
->         - ufw allow in on lo
->         - ufw allow out from lo
->         - ufw deny in from 127.0.0.0/8
->         - ufw deny in from ::1
->    - UFW reads service names from /etc/services but firewalld have XML files defining the services.
+- explicit public defaults in `defaults/main.yml`
+- automatic input validation through `meta/argument_specs.yml`
+- semantic validation in `tasks/assert.yml`
+- clean task dispatch in `tasks/main.yml`
+- generated metadata with `templates/meta_main.yml.j2` as the source of truth
+- shared Molecule verification content in `molecule/shared/`
 
-**Available variables are listed below, along with default values (see defaults/main.yml):**
+## Features
 
-    firewall_selected: "{{ _suggested_os_firewall }}"
+- installs the selected firewall backend and starts the related service
+- stops conflicting firewall services when they are present
+- supports named services and direct port rules
+- supports firewalld custom services through `firewall_service_mapping`
+- supports optional outgoing-policy tightening through `firewall_output_default_action`
+- keeps behavior idempotent and readable
 
-Allow user to choose which firewall software to use
+## Supported platforms
 
-    firewalld_default_zone: public
+Current metadata declares support for:
 
-This is a firewalld option to specify the default firewall zone.
+- Fedora 42 and 43
+- Ubuntu 22.04 (jammy) and 24.04 (noble)
+- Debian 12 (bookworm) and 13 (trixie)
 
-    firewall_default_protocol: tcp
+## Role variables
 
-If you don't specify a protocol in `firewall_services`, fall back to this.
+Defaults are defined in `defaults/main.yml`.
 
-    firewall_default_action: allow
+### Public variables
 
-If you don't specify a target in `firewall_services`, fall back to this. Valid options: allow, deny.
+```yaml
+---
+firewall_selected: "{{ _suggested_os_firewall }}"
+firewalld_default_zone: public
+firewall_default_protocol: tcp
+firewall_default_action: allow
+firewall_interface_zone: []
+firewall_service_mapping: []
+firewall_output_default_action: allow
+firewall_output_allow_ports:
+  - port: 80
+    protocol: tcp
+  - port: 443
+    protocol: tcp
+  - port: 53
+    protocol: tcp
+  - port: 53
+    protocol: udp
+  - port: 67
+    protocol: tcp
+  - port: 67
+    protocol: udp
+firewall_services: []
+```
 
-    #firewall_interface_zone:
-    #  - interface: enp1s0
-    #    zone: "{{ firewalld_default_zone }}"
-    #  - interface: virbr0
-    #    zone: libvirt
+### `firewall_services`
 
-Firewalld option to assign interfaces to firewall zones.
+Each item may define:
 
-    #firewall_service_mapping:
-    #  - name: ssh
-    #    ports: ['14090/tcp']
-    #  - name: cockpit
-    #    ports: ['9090/tcp']
-    #  - name: kodi
-    #    # Description will only be used for new services
-    #    description: 'This option allows kodi remote controls to communicate with kodi application'
-    #    short: 'Allows kodi remotes to access kodi'
-    #    ports: ['18998/tcp']
-    #  - name: dhcpv6-client
-    #    ports: ['546/udp']
+- `name`: required; a service name (for example `ssh`) or a numeric port
+- `action`: optional; `allow` or `deny`
+- `protocol`: optional; `tcp` or `udp`
+- `zone`: optional; firewalld only
 
-Maps a service name with port numbers.
-For firewalld, if service exists, updates the ports, otherwise create the service.
-For UFW, do nothing, just use the port numbers when running the command later on the ports.
-For example, cockpit port 9090/tcp would prevent an error of having a rule with service name as cockpit as it is not on /etc/services, so ufw cannot recognize it.
+Example:
 
-    firewall_output_default_action: allow   # options: allow or deny
-    #firewall_output_allow_ports:
-    #  - { port: 80, protocol: tcp }
-    #  - { port: 443, protocol: tcp }
-    #  - { port: 53, protocol: tcp }
-    #  - { port: 53, protocol: udp }
-    #  - { port: 67, protocol: tcp }
-    #  - { port: 67, protocol: udp }
+```yaml
+firewall_services:
+  - name: ssh
+  - name: cockpit
+    action: deny
+  - name: 8443
+    protocol: tcp
+```
 
-Should output traffic be allowed?
-If set to yes, it will still open ports 80 (http), 443 (https), 67 (dhcp) and 53 (DNS), so system updates continue to work
+### `firewall_service_mapping`
 
-    #firewall_services:
-    #  - name: ssh
-    #  - name: kodi
-    #  - name: cockpit
-    #    action: deny
-    #  - name: dhcpv6-client
-    #    action: deny
+Useful when a service name is not natively known by the target backend.
 
-A list of service to allow traffic to.
+Example:
 
-**The variables listed below do not need to be changed for targeted systems (see vars/main.yml):**
+```yaml
+firewall_service_mapping:
+  - name: cockpit
+    ports:
+      - 9090/tcp
+  - name: kodi
+    short: Allows kodi remotes
+    description: Allows kodi remote controls to connect
+    ports:
+      - 18998/tcp
+```
 
-    firewall_packages_conflicting:
+## How it works
 
-Packages that conflict with selected firewall software. Conflicting packages will be removed from the system.
+1. Optional SSH-port detection runs for SSH-based connections.
+2. Ansible applies `meta/argument_specs.yml` automatically.
+3. `tasks/assert.yml` performs semantic checks that do not belong in argument specs.
+4. The role installs the selected backend and disables conflicting services if present.
+5. Backend-specific tasks apply rules for `firewalld` or `ufw`.
 
-    firewall_packages_required:
+## Usage
 
-Packages to be installed to implement selected firewall software.
+### Standard usage
 
-    firewall_conflicting_services:
+```yaml
+---
+- name: Configure firewall
+  hosts: all
+  become: true
+  roles:
+    - role: guidugli.firewall
+```
 
-Services that conflicts with selected firewall software. These services will be disabled and stopped.
+### Example with explicit backend and custom rules
 
-    firewall_ipv4_service_name:
+```yaml
+---
+- name: Configure application firewall
+  hosts: app
+  become: true
+  vars:
+    firewall_selected: ufw
+    firewall_output_default_action: deny
+    firewall_services:
+      - name: ssh
+      - name: api
+    firewall_service_mapping:
+      - name: api
+        ports:
+          - 8443/tcp
+  roles:
+    - role: guidugli.firewall
+```
 
-Name of the service that implements firewall services for IPV4.
+## Design notes
 
-    firewall_ipv6_service_name:
+- **Privilege escalation**: the role does not force `become` in tasks or handlers. Callers should set `become: true` in the play when required.
+- **Validation model**: argument specs validate shape and type; `tasks/assert.yml` validates semantics and role-specific constraints.
+- **Metadata source of truth**: `templates/meta_main.yml.j2` should be updated first, then `meta/main.yml` regenerated.
+- **Molecule shared structure**: `molecule/shared/verify.yml` is provided so scenario files can reuse shared verification logic once the standard scenario wiring is in place.
 
-Name of the service that implements firewall services for IPV6.
+## Molecule testing
 
+Recommended commands:
 
-Dependencies
-------------
+```bash
+yamllint .
+ansible-lint
+molecule test -s default
+molecule test -s systemd
+```
 
-No dependencies.
+## Release workflow
 
-Example Playbook
-----------------
+- CI runs linting and Molecule tests.
+- Release publishing is handled by the repository release workflow.
+- Metadata should be regenerated from the template before tagging a release.
 
-    - hosts: servers
-      vars:
-        firewall_selected: "{{ _suggested_os_firewall }}"
-        firewalld_default_zone: public
-        firewall_default_protocol: tcp
-        firewall_default_action: allow
-        firewall_service_mapping:
-          - name: ssh
-            ports: ['19999/tcp']
-          - name: cockpit
-            ports: ['9090/tcp']
-          - name: kodi
-            # Description will only be used for new services
-            description: 'This option allows kodi remote controls to communicate with kodi application'
-            short: 'Allows kodi remotes to access kodi'
-            ports: ['18998/tcp']
-          - name: dhcpv6-client
-            ports: ['546/udp']
-        firewall_output_default_action: allow   # options: allow or deny
-        firewall_output_allow_ports:
-          - { port: 80, protocol: tcp }
-          - { port: 443, protocol: tcp }
-          - { port: 53, protocol: tcp }
-          - { port: 53, protocol: udp }
-          - { port: 67, protocol: tcp }
-          - { port: 67, protocol: udp }
-        firewall_services:
-          - name: ssh
-          - name: kodi
-          - name: cockpit
-            action: deny
-          - name: dhcpv6-client
-            action: deny
-      roles:
-         - { role: guidugli.firewall }
+## Repository structure
 
-License
--------
+```text
+defaults/
+handlers/
+meta/
+molecule/
+tasks/
+templates/
+vars/
+```
 
-MIT / BSD
+## License
 
-Author Information
-------------------
+MIT
 
-This role was created in 2020 by Carlos Guidugli.
+## Author
+
+Carlos Guidugli

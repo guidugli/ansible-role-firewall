@@ -1,181 +1,268 @@
 ---
-# Tasks for firewalld firewall implementation and configuration
-
-- name: Verify if provided service mapping exists on target system
+- name: Ensure custom firewalld services match requested mappings
   ansible.builtin.include_tasks: firewalld_services.yml
   loop: "{{ firewall_service_mapping }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - firewall_service_mapping | length > 0
+  tags: [config]
 
-- name: Retrieve and configure firewalld default zone
-  block:
-    - name: Ensure default zone is set for firewalld
-      ansible.builtin.command: /usr/bin/firewall-cmd --get-default-zone
-      changed_when: false
-      register: firewalld_get_default_zone_cmd
+- name: Read current firewalld default zone
+  ansible.builtin.command:
+    argv:
+      - firewall-cmd
+      - --get-default-zone
+  register: firewalld_get_default_zone_cmd
+  changed_when: false
+  tags: [config]
 
-    - name: Set default zone to {{ firewalld_default_zone | default('public') }}
-      ansible.builtin.command: "firewall-cmd --set-default-zone={{ firewalld_default_zone | default('public') }}"
-      changed_when: true
-      when:
-        - firewalld_default_zone is defined
-        - firewalld_get_default_zone_cmd.stdout != firewalld_default_zone
+- name: Set firewalld default zone when needed
+  ansible.builtin.command:
+    argv:
+      - firewall-cmd
+      - "--set-default-zone={{ firewalld_default_zone }}"
+  when:
+    - firewalld_get_default_zone_cmd.stdout != firewalld_default_zone
+  changed_when: true
+  notify: reload firewall
+  tags: [config]
 
-    # In case user did not specify a default zone
-    - name: Update firewalld_default_zone if required
-      ansible.builtin.set_fact:
-        firewalld_default_zone: "{{ firewalld_get_default_zone_cmd.stdout }}"
-      when: firewalld_default_zone is undefined
-
-- name: Open ports (firewalld-port)
+- name: Allow numeric ports with firewalld
   ansible.posix.firewalld:
     port: "{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}"
-    permanent: yes
-    state: enabled
     zone: "{{ item.zone | default(firewalld_default_zone) }}"
+    permanent: true
+    state: enabled
   loop: "{{ firewall_services }}"
-  when:
-    - firewall_services is defined
-    - item.name | int(-1) > 0
-    - (item.action is undefined and firewall_default_action == 'allow') or
-      (item.action is defined and item.action == 'allow')
   loop_control:
     label: "{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}"
-  notify:
-    - Reload firewalld
+  when:
+    - (item.name | string) is match('^[0-9]+$')
+    - item.action | default(firewall_default_action) == 'allow'
+  notify: reload firewall
+  tags: [config]
 
-- name: Close ports (firewalld-port)
+- name: Deny numeric ports with firewalld
   ansible.posix.firewalld:
     port: "{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}"
-    permanent: yes
-    state: disabled
     zone: "{{ item.zone | default(firewalld_default_zone) }}"
+    permanent: true
+    state: disabled
   loop: "{{ firewall_services }}"
-  when:
-    - item.name is number
-    - (item.action is undefined and firewall_default_action == 'deny') or
-      (item.action is defined and item.action == 'deny')
   loop_control:
-    label: "{{ item.name }}"
-  notify:
-    - Reload firewalld
+    label: "{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}"
+  when:
+    - (item.name | string) is match('^[0-9]+$')
+    - item.action | default(firewall_default_action) == 'deny'
+  notify: reload firewall
+  tags: [config]
 
-- name: Open ports (firewalld-service)
+- name: Allow named services with firewalld
   ansible.posix.firewalld:
     service: "{{ item.name }}"
-    permanent: yes
+    zone: "{{ item.zone | default(firewalld_default_zone) }}"
+    permanent: true
     state: enabled
-    zone: "{{ item.zone | default(firewalld_default_zone) }}"
   loop: "{{ firewall_services }}"
-  when:
-    - item.name is not number
-    - (item.action is undefined and firewall_default_action == 'allow') or
-      (item.action is defined and item.action == 'allow')
   loop_control:
     label: "{{ item.name }}"
-  notify:
-    - Reload firewalld
+  when:
+    - not ((item.name | string) is match('^[0-9]+$'))
+    - item.action | default(firewall_default_action) == 'allow'
+  notify: reload firewall
+  tags: [config]
 
-- name: Close ports (firewalld-service)
-  vars:
-    item_action: "{{ item.action | default(firewall_default_action) }}"
-    item_zone: "{{ item.zone | default(firewalld_default_zone) }}"
+- name: Deny named services with firewalld
   ansible.posix.firewalld:
     service: "{{ item.name }}"
-    permanent: yes
+    zone: "{{ item.zone | default(firewalld_default_zone) }}"
+    permanent: true
     state: disabled
-    zone: "{{ item_zone }}"
   loop: "{{ firewall_services }}"
-  when:
-    - item.name is not number
-    - (item.action is undefined and firewall_default_action == 'deny') or
-      (item.action is defined and item_action == 'deny')
   loop_control:
-    label: "{{ item.name }}, {{ item_zone }}"
-  notify:
-    - Reload firewalld
+    label: "{{ item.name }}"
+  when:
+    - not ((item.name | string) is match('^[0-9]+$'))
+    - item.action | default(firewall_default_action) == 'deny'
+  notify: reload firewall
+  tags: [config]
 
-- name: Configure OUTPUT chain
-  block:
-    - name: Add rule to allow established connections
-      ansible.builtin.command: "firewall-offline-cmd --direct --add-rule ipv4 filter OUTPUT 0 -m state --state ESTABLISHED,RELATED -j ACCEPT"  # yamllint disable-line rule:line-length
-      changed_when: firewall_output_cmd.stderr | length == 0
-      register: firewall_output_cmd
-      when: firewall_output_default_action == 'deny'
-      notify:
-        - Reload firewalld
+- name: Ensure established outbound traffic rule exists when default output is deny
+  ansible.builtin.command:
+    argv:
+      - firewall-offline-cmd
+      - --direct
+      - --add-rule
+      - ipv4
+      - filter
+      - OUTPUT
+      - '0'
+      - -m
+      - state
+      - --state
+      - ESTABLISHED,RELATED
+      - -j
+      - ACCEPT
+  register: firewalld_add_established_rule
+  changed_when: firewalld_add_established_rule.rc == 0
+  failed_when:
+    - firewalld_add_established_rule.rc != 0
+    - "'ALREADY_ENABLED' not in (firewalld_add_established_rule.stderr | default(''))"
+  when:
+    - firewall_output_default_action == 'deny'
+  notify: reload firewall
+  tags: [config]
 
-    - name: Add rules to allow outgoing connection for selected ports
-      ansible.builtin.command: "firewall-offline-cmd --direct --add-rule ipv4 filter OUTPUT 1 -p {{ item.protocol }} -m {{ item.protocol }} --dport {{ item.port }} -j ACCEPT"  # yamllint disable-line rule:line-length
-      changed_when: firewall_output_cmd.stderr | length == 0
-      register: firewall_output_cmd
-      loop: "{{ firewall_output_allow_ports }}"
-      when: firewall_output_default_action == 'deny'
-      notify:
-        - Reload firewalld
+- name: Ensure allowed outbound ports exist when default output is deny
+  ansible.builtin.command:
+    argv:
+      - firewall-offline-cmd
+      - --direct
+      - --add-rule
+      - ipv4
+      - filter
+      - OUTPUT
+      - '1'
+      - -p
+      - "{{ item.protocol }}"
+      - -m
+      - "{{ item.protocol }}"
+      - --dport
+      - "{{ item.port }}"
+      - -j
+      - ACCEPT
+  loop: "{{ firewall_output_allow_ports }}"
+  loop_control:
+    label: "{{ item.port }}/{{ item.protocol }}"
+  register: firewalld_add_outbound_allow_rule
+  changed_when: firewalld_add_outbound_allow_rule.rc == 0
+  failed_when:
+    - firewalld_add_outbound_allow_rule.rc != 0
+    - "'ALREADY_ENABLED' not in (firewalld_add_outbound_allow_rule.stderr | default(''))"
+  when:
+    - firewall_output_default_action == 'deny'
+  notify: reload firewall
+  tags: [config]
 
-    - name: Add rule to deny all traffic that do not match previous rules
-      ansible.builtin.command: "firewall-offline-cmd --direct --add-rule ipv4 filter OUTPUT 2 -j DROP"
-      changed_when: firewall_output_cmd.stderr | length == 0
-      register: firewall_output_cmd
-      when: firewall_output_default_action == 'deny'
-      notify:
-        - Reload firewalld
+- name: Ensure final outbound drop rule exists when default output is deny
+  ansible.builtin.command:
+    argv:
+      - firewall-offline-cmd
+      - --direct
+      - --add-rule
+      - ipv4
+      - filter
+      - OUTPUT
+      - '2'
+      - -j
+      - DROP
+  register: firewalld_add_drop_rule
+  changed_when: firewalld_add_drop_rule.rc == 0
+  failed_when:
+    - firewalld_add_drop_rule.rc != 0
+    - "'ALREADY_ENABLED' not in (firewalld_add_drop_rule.stderr | default(''))"
+  when:
+    - firewall_output_default_action == 'deny'
+  notify: reload firewall
+  tags: [config]
 
-    - name: Add rule to allow established connections
-      ansible.builtin.command: "firewall-offline-cmd --direct --remove-rule ipv4 filter OUTPUT 0 -m state --state ESTABLISHED,RELATED -j ACCEPT"  # yamllint disable-line rule:line-length
-      changed_when: firewall_output_cmd.rc == 0
-      failed_when: firewall_output_cmd.rc not in [0,2]
-      register: firewall_output_cmd
-      when: firewall_output_default_action == 'allow'
-      notify:
-        - Reload firewalld
+- name: Remove established outbound traffic rule when default output is allow
+  ansible.builtin.command:
+    argv:
+      - firewall-offline-cmd
+      - --direct
+      - --remove-rule
+      - ipv4
+      - filter
+      - OUTPUT
+      - '0'
+      - -m
+      - state
+      - --state
+      - ESTABLISHED,RELATED
+      - -j
+      - ACCEPT
+  register: firewalld_remove_established_rule
+  changed_when: firewalld_remove_established_rule.rc == 0
+  failed_when: firewalld_remove_established_rule.rc not in [0, 2]
+  when:
+    - firewall_output_default_action == 'allow'
+  notify: reload firewall
+  tags: [config]
 
-    - name: Add rules to allow outgoing connection for selected ports
-      ansible.builtin.command: >
-        firewall-offline-cmd --direct --remove-rule ipv4 filter OUTPUT 1
-         -p {{ item.protocol }} -m {{ item.protocol }} --dport {{ item.port }} -j ACCEPT
-      changed_when: firewall_output_cmd.stderr | length == 0
-      failed_when: firewall_output_cmd.rc not in [0,2]
-      register: firewall_output_cmd
-      loop: "{{ firewall_output_allow_ports }}"
-      when: firewall_output_default_action == 'allow'
-      notify:
-        - Reload firewalld
+- name: Remove explicit allowed outbound ports when default output is allow
+  ansible.builtin.command:
+    argv:
+      - firewall-offline-cmd
+      - --direct
+      - --remove-rule
+      - ipv4
+      - filter
+      - OUTPUT
+      - '1'
+      - -p
+      - "{{ item.protocol }}"
+      - -m
+      - "{{ item.protocol }}"
+      - --dport
+      - "{{ item.port }}"
+      - -j
+      - ACCEPT
+  loop: "{{ firewall_output_allow_ports }}"
+  loop_control:
+    label: "{{ item.port }}/{{ item.protocol }}"
+  register: firewalld_remove_outbound_allow_rule
+  changed_when: firewalld_remove_outbound_allow_rule.rc == 0
+  failed_when: firewalld_remove_outbound_allow_rule.rc not in [0, 2]
+  when:
+    - firewall_output_default_action == 'allow'
+  notify: reload firewall
+  tags: [config]
 
-    - name: Add rule to deny all traffic that do not match previous rules
-      ansible.builtin.command: "firewall-offline-cmd --direct --remove-rule ipv4 filter OUTPUT 2 -j DROP"
-      changed_when: firewall_output_cmd.stderr | length == 0
-      failed_when: firewall_output_cmd.rc not in [0,2]
-      register: firewall_output_cmd
-      when: firewall_output_default_action == 'allow'
-      notify:
-        - Reload firewalld
+- name: Remove final outbound drop rule when default output is allow
+  ansible.builtin.command:
+    argv:
+      - firewall-offline-cmd
+      - --direct
+      - --remove-rule
+      - ipv4
+      - filter
+      - OUTPUT
+      - '2'
+      - -j
+      - DROP
+  register: firewalld_remove_drop_rule
+  changed_when: firewalld_remove_drop_rule.rc == 0
+  failed_when: firewalld_remove_drop_rule.rc not in [0, 2]
+  when:
+    - firewall_output_default_action == 'allow'
+  notify: reload firewall
+  tags: [config]
 
-- name: Set zones for network devices
+- name: Assign interfaces to firewalld zones
   ansible.posix.firewalld:
-    zone: "{{ item.zone }}"
     interface: "{{ item.interface }}"
-    permanent: yes
+    zone: "{{ item.zone }}"
+    permanent: true
     state: enabled
-  loop: "{{ firewall_interface_zone | default([]) }}"
+  loop: "{{ firewall_interface_zone }}"
+  loop_control:
+    label: "{{ item.interface }} -> {{ item.zone }}"
+  when:
+    - firewall_interface_zone | length > 0
+  notify: reload firewall
+  tags: [config]
 
-- name: Force flush handlers
+- name: Flush handlers before applying runtime SSH exception
   ansible.builtin.meta: flush_handlers
+  tags: [config]
 
-# Avoid losing connection to server. Since it is only runtime
-# it won't persist unless specified in the configuration variables.
-- name: Apply a runtime only rule to add current ssh connection
+- name: Keep current SSH port open at runtime
   ansible.posix.firewalld:
     port: "{{ ansible_port }}/tcp"
-    permanent: no
+    permanent: false
     state: enabled
   when:
     - ansible_port is defined
-
-- name: Display effective configuration after tasks
-  ansible.builtin.command: "firewall-offline-cmd --list-all-zones"
-  register: firewall_output_cmd
-  changed_when: false
-
-- name: Show last task output
-  ansible.builtin.debug:
-    msg: "{{ firewall_output_cmd.stdout_lines }}"
+  tags: [config]

@@ -1,0 +1,132 @@
+---
+argument_specs:
+    main:
+        short_description: Validate public variables for the firewall role.
+        options:
+            firewall_selected:
+                type: str
+                default: "{{ _suggested_os_firewall }}"
+                choices:
+                    - firewalld
+                    - ufw
+                description:
+                    - Firewall backend to configure on supported platforms.
+            firewalld_default_zone:
+                type: str
+                default: public
+                description:
+                    - Default firewalld zone used when a zone is not set per rule.
+            firewall_default_protocol:
+                type: str
+                default: tcp
+                choices:
+                    - tcp
+                    - udp
+                description:
+                    - Default protocol used when a firewall service item does not specify one.
+            firewall_default_action:
+                type: str
+                default: allow
+                choices:
+                    - allow
+                    - deny
+                description:
+                    - Default action used when a firewall service item does not specify one.
+            firewall_interface_zone:
+                type: list
+                elements: dict
+                default: []
+                description:
+                    - Optional firewalld interface-to-zone assignments.
+                options:
+                    interface:
+                        type: str
+                        required: true
+                    zone:
+                        type: str
+                        required: true
+            firewall_service_mapping:
+                type: list
+                elements: dict
+                default: []
+                description:
+                    - >-
+                      Optional service-to-port mappings, mainly for
+                      firewalld custom services and UFW named-service expansion.
+                options:
+                    name:
+                        type: str
+                        required: true
+                    ports:
+                        type: list
+                        elements: str
+                        required: true
+                    description:
+                        type: str
+                        required: false
+                    short:
+                        type: str
+                        required: false
+            firewall_output_default_action:
+                type: str
+                default: allow
+                choices:
+                    - allow
+                    - deny
+                description:
+                    - >-
+                      Default outgoing policy. When deny is used,
+                      allow rules from firewall_output_allow_ports are added.
+            firewall_output_allow_ports:
+                type: list
+                elements: dict
+                default:
+                    - port: 80
+                      protocol: tcp
+                    - port: 443
+                      protocol: tcp
+                    - port: 53
+                      protocol: tcp
+                    - port: 53
+                      protocol: udp
+                    - port: 67
+                      protocol: tcp
+                    - port: 67
+                      protocol: udp
+                description:
+                    - Outgoing ports allowed when firewall_output_default_action is deny.
+                options:
+                    port:
+                        type: int
+                        required: true
+                    protocol:
+                        type: str
+                        required: true
+                        choices:
+                            - tcp
+                            - udp
+            firewall_services:
+                type: list
+                elements: dict
+                default: []
+                description:
+                    - Services or ports to manage.
+                options:
+                    name:
+                        type: raw
+                        required: true
+                    action:
+                        type: str
+                        required: false
+                        choices:
+                            - allow
+                            - deny
+                    protocol:
+                        type: str
+                        required: false
+                        choices:
+                            - tcp
+                            - udp
+                    zone:
+                        type: str
+                        required: false

@@ -1,0 +1,166 @@
+---
+- name: Verify firewall role behavior
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Gather package facts
+      ansible.builtin.package_facts:
+        manager: auto
+
+    - name: Gather service facts
+      ansible.builtin.service_facts:
+
+    - name: Derive expected firewall backend for verification
+      ansible.builtin.set_fact:
+        firewall_effective_selected: >-
+          {{
+            'ufw'
+            if ansible_facts['distribution'] in ['Debian', 'Ubuntu']
+            else 'firewalld'
+          }}
+        firewall_effective_ipv4_service_name: >-
+          {{
+            'ufw'
+            if ansible_facts['distribution'] in ['Debian', 'Ubuntu']
+            else 'firewalld'
+          }}
+        firewall_effective_default_zone: public
+        firewall_container_types:
+          - docker
+          - podman
+          - lxc
+          - containerd
+          - container
+
+    - name: Determine whether UFW runtime activation checks should be skipped
+      ansible.builtin.set_fact:
+        firewall_skip_ufw_runtime_checks: >-
+          {{
+            firewall_effective_selected == 'ufw'
+            and ansible_facts['virtualization_type'] | default('')
+              in firewall_container_types
+            and ansible_facts['virtualization_role'] | default('guest') == 'guest'
+          }}
+
+    - name: Assert expected firewall package is installed
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              firewall_effective_selected == 'firewalld'
+              and 'firewalld' in ansible_facts.packages
+            )
+            or
+            (
+              firewall_effective_selected == 'ufw'
+              and 'ufw' in ansible_facts.packages
+            )
+        quiet: true
+
+    - name: Assert expected firewall service is known
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              ansible_facts['service_mgr'] == 'systemd'
+              and ansible_facts.services[
+                firewall_effective_ipv4_service_name ~ '.service'
+              ] is defined
+            )
+            or
+            (
+              ansible_facts['service_mgr'] != 'systemd'
+              and ansible_facts.services[
+                firewall_effective_ipv4_service_name
+              ] is defined
+            )
+        quiet: true
+
+    - name: Verify UFW status output
+      ansible.builtin.command:
+        argv:
+          - ufw
+          - status
+          - verbose
+      register: firewall_verify_ufw_status
+      changed_when: false
+      when:
+        - firewall_effective_selected == 'ufw'
+        - not firewall_skip_ufw_runtime_checks
+
+    - name: Assert UFW is enabled and expected rules exist
+      ansible.builtin.assert:
+        that:
+          - "'Status: active' in firewall_verify_ufw_status.stdout"
+          - "'19999/tcp' in firewall_verify_ufw_status.stdout"
+          - "'18998/tcp' in firewall_verify_ufw_status.stdout"
+          - "'9090/tcp' not in firewall_verify_ufw_status.stdout"
+        quiet: true
+      when:
+        - firewall_effective_selected == 'ufw'
+        - not firewall_skip_ufw_runtime_checks
+
+    - name: Explain why UFW runtime checks are skipped
+      ansible.builtin.debug:
+        msg: >-
+          Skipping UFW runtime verification on a container guest because
+          UFW activation may be intentionally skipped when sysctl changes
+          are restricted by the container runtime.
+      when:
+        - firewall_skip_ufw_runtime_checks
+
+    - name: Query firewalld default zone
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --get-default-zone
+      register: firewall_verify_firewalld_zone
+      changed_when: false
+      when:
+        - firewall_effective_selected == 'firewalld'
+
+    - name: Query custom firewalld service ports for kodi
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - --service=kodi
+          - --get-ports
+      register: firewall_verify_firewalld_kodi_ports
+      changed_when: false
+      when:
+        - firewall_effective_selected == 'firewalld'
+
+    - name: Query firewalld SSH service state
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - "--zone={{ firewall_effective_default_zone }}"
+          - --query-service=ssh
+      register: firewall_verify_firewalld_ssh
+      changed_when: false
+      when:
+        - firewall_effective_selected == 'firewalld'
+
+    - name: Query firewalld cockpit service state
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - "--zone={{ firewall_effective_default_zone }}"
+          - --query-service=cockpit
+      register: firewall_verify_firewalld_cockpit
+      changed_when: false
+      failed_when: firewall_verify_firewalld_cockpit.rc not in [0, 1]
+      when:
+        - firewall_effective_selected == 'firewalld'
+
+    - name: Assert firewalld state matches the test scenario
+      ansible.builtin.assert:
+        that:
+          - firewall_verify_firewalld_zone.stdout == firewall_effective_default_zone
+          - "'18998/tcp' in firewall_verify_firewalld_kodi_ports.stdout"
+          - firewall_verify_firewalld_ssh.rc == 0
+          - firewall_verify_firewalld_cockpit.rc == 1
+        quiet: true
+      when:
+        - firewall_effective_selected == 'firewalld'

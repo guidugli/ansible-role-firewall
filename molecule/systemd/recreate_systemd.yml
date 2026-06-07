@@ -1,0 +1,51 @@
+---
+- name: Detect systemd entrypoint paths inside running containers
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Detect systemd path in each container
+      containers.podman.podman_container_exec:
+        name: "{{ item }}"
+        argv:
+          - /bin/sh
+          - -c
+          - >-
+            if [ -x /lib/systemd/systemd ]; then echo /lib/systemd/systemd;
+            elif [ -x /usr/lib/systemd/systemd ]; then echo /usr/lib/systemd/systemd;
+            elif [ -x /sbin/init ]; then echo /sbin/init;
+            else echo ""; fi
+      register: _systemd_detect
+      loop: "{{ groups.get('molecule', []) }}"
+      changed_when: false
+      failed_when: >-
+        (_systemd_detect.stdout | default('') | trim | length) == 0
+
+    - name: Build a map of container to systemd entrypoint
+      ansible.builtin.set_fact:
+        systemd_entrypoint_map: >-
+          {{
+            systemd_entrypoint_map | default({})
+            | combine({item.item: (item.stdout | trim)})
+          }}
+      loop: "{{ _systemd_detect.results }}"
+      changed_when: false
+
+- name: Recreate containers with systemd as PID1
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Recreate containers with detected systemd entrypoint
+      containers.podman.podman_container:
+        name: "{{ item }}"
+        hostname: "{{ item }}"
+        image: "localhost/molecule-systemd-{{ item }}:latest"
+        command: "{{ systemd_entrypoint_map[item] }}"
+        privileged: true
+        volume:
+          - /sys/fs/cgroup:/sys/fs/cgroup:ro
+        tmpfs:
+          /run: rw
+          /tmp: rw
+        state: started
+        recreate: true
+      loop: "{{ groups.get('molecule', []) }}"

@@ -1,82 +1,103 @@
 ---
-# vars file for firewall
-
 _firewalld_info:
   packages:
-    default: ['firewalld']
+    default:
+      - firewalld
   service_name:
     default: firewalld
   conflicting_services:
-    default: ['ufw', 'iptables', 'ip6tables', 'nftables']
-  actions_map:
-    allow: enabled
-    accept: enabled
-    reject: disabled
-    drop: disabled
-    deny: disabled
+    default:
+      - ufw
+      - iptables
+      - ip6tables
+      - nftables
 
 _ufw_info:
   packages:
-    default: ['ufw']
+    default:
+      - ufw
   service_name:
     default: ufw
   conflicting_services:
-    default: ['firewalld', 'iptables', 'ip6tables', 'nftables']
-  actions_map:
-    allow: allow
-    deny: deny
-    reject: reject
-    drop: reject
-
-_iptables_info:
-  packages:
-    default: ['iptables']
-    RedHat: ['iptables-services']
-    Rocky: ['iptables-services']
-  service_name:
-    default: iptables
-  ipv6_service_name:
-    default: ip6tables
-  conflicting_services:
-    default: ['firewalld', 'ufw', 'nftables']
-  actions_map:
-    allow: allow
-    deny: deny
-    reject: reject
-    drop: reject
+    default:
+      - firewalld
+      - iptables
+      - ip6tables
+      - nftables
 
 _preferred_os_firewall:
-  default: iptables
-  RedHat: firewalld
-  Rocky: firewalld
-  CentOS: firewalld
+  default: ufw
   Fedora: firewalld
   Debian: ufw
   Ubuntu: ufw
-  Alpine: iptables
-  openSUSE Leap: firewalld
 
-# yamllint disable rule:line-length
+_distribution_key: >-
+  {{
+    ansible_facts['distribution']
+    ~ '-'
+    ~ ansible_facts['distribution_major_version']
+  }}
 
-_suggested_os_firewall: "{{ _preferred_os_firewall[ansible_distribution ~ '-' ~ ansible_distribution_major_version] | default(_preferred_os_firewall[ansible_distribution]) | default(_preferred_os_firewall['default']) }}"
+_suggested_os_firewall: >-
+  {{
+    _preferred_os_firewall[_distribution_key]
+    | default(_preferred_os_firewall[ansible_facts['distribution']])
+    | default(_preferred_os_firewall['default'])
+  }}
 
-_selected_firewall_info: "{{ vars['_' + firewall_selected + '_info'] }}"
+_selected_firewall_info: >-
+  {{
+    _firewalld_info
+    if firewall_selected == 'firewalld'
+    else _ufw_info
+  }}
 
-firewall_packages_conflicting: "{{ _selected_firewall_info['conflicting_services'][ansible_distribution ~ '-' ~ ansible_distribution_major_version] | default(_selected_firewall_info['conflicting_services'][ansible_distribution]) | default(_selected_firewall_info['conflicting_services']['default']) }}"
+firewall_packages_required: >-
+  {{
+    _selected_firewall_info['packages'][_distribution_key]
+    | default(
+        _selected_firewall_info['packages'][ansible_facts['distribution']]
+      )
+    | default(_selected_firewall_info['packages']['default'])
+  }}
 
-firewall_packages_required: "{{ _selected_firewall_info['packages'][ansible_distribution ~ '-' ~ ansible_distribution_major_version] | default(_selected_firewall_info['packages'][ansible_distribution]) | default(_selected_firewall_info['packages']['default']) }}"
+firewall_conflicting_services: >-
+  {{
+    _selected_firewall_info['conflicting_services'][_distribution_key]
+    | default(
+        _selected_firewall_info['conflicting_services'][
+          ansible_facts['distribution']
+        ]
+      )
+    | default(_selected_firewall_info['conflicting_services']['default'])
+  }}
 
-firewall_conflicting_services: "{{ _selected_firewall_info['conflicting_services'][ansible_distribution ~ '-' ~ ansible_distribution_major_version] | default(_selected_firewall_info['conflicting_services'][ansible_distribution]) | default(_selected_firewall_info['conflicting_services']['default']) }}"
+firewall_ipv4_service_name: >-
+  {{
+    _selected_firewall_info['service_name'][_distribution_key]
+    | default(
+        _selected_firewall_info['service_name'][ansible_facts['distribution']]
+      )
+    | default(_selected_firewall_info['service_name']['default'])
+  }}
 
-firewall_ipv4_service_name: "{{ _selected_firewall_info['service_name'][ansible_distribution ~ '-' ~ ansible_distribution_major_version] | default(_selected_firewall_info['service_name'][ansible_distribution]) | default(_selected_firewall_info['service_name']['default']) }}"
-
-firewall_ipv6_service_name: "{{ _selected_firewall_info['ipv6_service_name'][ansible_distribution ~ '-' ~ ansible_distribution_major_version] | default(_selected_firewall_info['ipv6_service_name'][ansible_distribution]) | default(_selected_firewall_info['ipv6_service_name']['default']) | default('unavailable') }}"
+firewall_ipv6_service_name: unavailable
 
 _firewall_iptables_rulefile:
   Alpine: /etc/iptables/rules-save
 
-firewall_iptables_rulefile: "{{ _firewall_iptables_rulefile[ansible_distribution ~ '-' ~ ansible_distribution_major_version] | default(_firewall_iptables_rulefile[ansible_distribution] | default(_firewall_iptables_rulefile['default'])) }}"
+firewall_iptables_rulefile: >-
+  {{
+    _firewall_iptables_rulefile[_distribution_key]
+    | default(
+        _firewall_iptables_rulefile[ansible_facts['distribution']]
+        | default(_firewall_iptables_rulefile['default'] | default(''))
+      )
+  }}
 
-# yamllint enable rule:line-length
-
-_container_types: ['docker', 'podman', 'lxc', 'containerd', 'container']
+_container_types:
+  - docker
+  - podman
+  - lxc
+  - containerd
+  - container

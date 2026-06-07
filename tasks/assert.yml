@@ -1,91 +1,115 @@
 ---
-- name: Test if firewall_selected is set correctly
+- name: Assert supported firewall backend
   ansible.builtin.assert:
     that:
-      - firewall_selected is defined
-      - firewall_selected in ['ufw','iptables','firewalld']
-    quiet: yes
+      - firewall_selected in ['firewalld', 'ufw']
+    fail_msg: >-
+      Unsupported firewall_selected={{ firewall_selected }}.
+      This role supports only firewalld and ufw.
+    quiet: true
+  tags: [validate]
 
-- name: Test if firewall_default_protocol is set correctly
+- name: Assert firewalld interface zones are only used with firewalld
   ansible.builtin.assert:
     that:
-      - firewall_default_protocol is defined
-      - firewall_default_protocol in ["tcp", "udp"]
-    quiet: yes
+      - firewall_selected == 'firewalld' or (firewall_interface_zone | length == 0)
+    fail_msg: firewall_interface_zone can only be used when firewall_selected is firewalld.
+    quiet: true
+  tags: [validate]
 
-- name: Test if firewall_default_action is set correctly
+- name: Assert firewall_interface_zone items are complete
   ansible.builtin.assert:
     that:
-      - firewall_default_action is defined
-      - firewall_default_action in ["allow", "deny"]
-    quiet: yes
+      - item.interface | string | trim | length > 0
+      - item.zone | string | trim | length > 0
+    fail_msg: >-
+      Each firewall_interface_zone item must define non-empty interface and
+      zone values.
+    quiet: true
+  loop: "{{ firewall_interface_zone }}"
+  loop_control:
+    label: "{{ item.interface | default('undefined') }}"
+  tags: [validate]
 
-- name: Test if firewall_services is set correctly
+- name: Assert firewall_service_mapping item names are unique
   ansible.builtin.assert:
     that:
-      - firewall_services is iterable
-      - firewall_services | length > 0
-    quiet: yes
-  when:
-    - firewall_services is defined
+      - firewall_service_mapping | map(attribute='name') | list | length ==
+        firewall_service_mapping | map(attribute='name') | list | unique | length
+    fail_msg: firewall_service_mapping contains duplicate service names.
+    quiet: true
+  tags: [validate]
 
-- name: Test if firewall_interface_zone is set correctly
+- name: Assert firewall_service_mapping items are valid
   ansible.builtin.assert:
     that:
-      - firewall_interface_zone is iterable
-      - firewall_interface_zone | length > 0
-    quiet: yes
-  when: firewall_interface_zone is defined
+      - item.name | string | trim | length > 0
+      - item.ports | length > 0
+      - item.description is not defined or item.description | string is string
+      - item.short is not defined or item.short | string is string
+    fail_msg: >-
+      Each firewall_service_mapping item must define a non-empty name and at
+      least one port.
+    quiet: true
+  loop: "{{ firewall_service_mapping }}"
+  loop_control:
+    label: "{{ item.name | default('undefined') }}"
+  tags: [validate]
 
-- name: Test if non-numeric item in firewall_services is set correctly
+- name: Assert firewall_service_mapping ports use port/protocol format
+  ansible.builtin.assert:
+    that:
+      - port_item is match('^[0-9]{1,5}/(tcp|udp)$')
+      - (port_item.split('/')[0] | int) > 0
+      - (port_item.split('/')[0] | int) < 65536
+    fail_msg: >-
+      firewall_service_mapping ports must use the form <port>/<protocol> with
+      a valid TCP or UDP port.
+    quiet: true
+  loop: "{{ firewall_service_mapping | subelements('ports') }}"
+  loop_control:
+    label: "{{ item.0.name }} -> {{ item.1 }}"
+  vars:
+    port_item: "{{ item.1 }}"
+  tags: [validate]
+
+- name: Assert firewall_services items are valid
   ansible.builtin.assert:
     that:
       - item.name is defined
-      - item.name is string
-      - item.name | length > 0
-    quiet: yes
+      - >-
+        (
+          item.name is string
+          and item.name | trim | length > 0
+        )
+        or
+        (
+          (item.name | string) is match('^[0-9]+$')
+          and (item.name | int) > 0
+          and (item.name | int) < 65536
+        )
+      - item.action is not defined or item.action in ['allow', 'deny']
+      - item.protocol is not defined or item.protocol in ['tcp', 'udp']
+      - item.zone is not defined or item.zone | string | trim | length > 0
+      - item.zone is not defined or firewall_selected == 'firewalld'
+    fail_msg: >-
+      Each firewall_services item must define a valid service name or numeric
+      port, and optional action, protocol, and zone values must be valid.
+    quiet: true
   loop: "{{ firewall_services }}"
   loop_control:
-    label: "{{ item.name }}"
-  when:
-    - firewall_services is defined
-    - item.name | type_debug != "int"
+    label: "{{ item.name | string }}"
+  tags: [validate]
 
-- name: Test if numeric item in firewall_services is set correctly
+- name: Assert outgoing allow ports are valid
   ansible.builtin.assert:
     that:
-      - item.name is defined
-      - item.name | int > 0
-      - item.name | int < 65536
-    quiet: yes
-  loop: "{{ firewall_services }}"
+      - item.port | int > 0
+      - item.port | int < 65536
+      - item.protocol in ['tcp', 'udp']
+    fail_msg: firewall_output_allow_ports entries must contain a valid port and protocol.
+    quiet: true
+  loop: "{{ firewall_output_allow_ports }}"
   loop_control:
-    label: "{{ item.name }}"
-  when:
-    - firewall_services is defined
-    - item.name | int(-1) != -1
-
-- name: Test if item with action in firewall_services is set correctly
-  ansible.builtin.assert:
-    that:
-      - item.action in ["allow", "deny"]
-    quiet: yes
-  loop: "{{ firewall_services }}"
-  loop_control:
-    label: "{{ item.action | default('undefined') }}"
-  when:
-    - firewall_services is defined
-    - item.action is defined
-
-- name: Test if item with zone in firewall_services is set correctly (firewalld only)
-  ansible.builtin.assert:
-    that:
-      - item.zone | length > 0
-    quiet: yes
-  loop: "{{ firewall_services }}"
-  loop_control:
-    label: "{{ item.zone | default('undefined') }}"
-  when:
-    - firewall_services is defined
-    - item.zone is defined
-    - firewall_selected == 'firewalld'
+    label: "{{ item.port }}/{{ item.protocol }}"
+  tags: [validate]
