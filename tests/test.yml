@@ -3,4 +3,4 @@
   hosts: localhost
   remote_user: root
   roles:
-    - guidugli.firewall
+    - role: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"

@@ -1,5 +1,6 @@
 ---
 - name: Configure loopback protection rules
+  tags: [config]
   block:
     - name: Allow incoming loopback traffic
       community.general.ufw:
@@ -26,9 +27,9 @@
         from: ::1
       when:
         - firewall_ipv6_enabled | default(false)
-  tags: [config]
 
 - name: Set UFW default policies
+  tags: [config]
   block:
     - name: Deny incoming traffic by default
       community.general.ufw:
@@ -44,7 +45,6 @@
       community.general.ufw:
         default: "{{ firewall_output_default_action }}"
         direction: outgoing
-  tags: [config]
 
 - name: Allow selected outgoing ports when default output is deny
   community.general.ufw:

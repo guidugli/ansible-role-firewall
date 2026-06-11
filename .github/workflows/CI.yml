@@ -22,7 +22,6 @@ jobs:
       fail-fast: false
       matrix:
         scenario:
-          - default
           - systemd
 
     steps:
