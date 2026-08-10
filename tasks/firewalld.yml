@@ -1,14 +1,15 @@
 ---
 - name: Ensure custom firewalld services match requested mappings
   ansible.builtin.include_tasks: firewalld_services.yml
-  loop: '{{ firewall_service_mapping }}'
+  loop: "{{ firewall_service_mapping }}"
   loop_control:
-    label: '{{ item.name }}'
+    label: "{{ item.name }}"
   when:
     - firewall_service_mapping | length > 0
   tags:
     - firewall
     - config
+
 - name: Read current firewalld default zone
   ansible.builtin.command:
     argv:
@@ -19,11 +20,12 @@
   tags:
     - firewall
     - config
+
 - name: Set firewalld default zone when needed
   ansible.builtin.command:
     argv:
       - firewall-cmd
-      - --set-default-zone={{ firewalld_default_zone }}
+      - "--set-default-zone={{ firewalld_default_zone }}"
   when:
     - firewalld_get_default_zone_cmd.stdout != firewalld_default_zone
   changed_when: true
@@ -31,15 +33,16 @@
   tags:
     - firewall
     - config
+
 - name: Allow numeric ports with firewalld
   ansible.posix.firewalld:
-    port: '{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}'
-    zone: '{{ item.zone | default(firewalld_default_zone) }}'
+    port: "{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}"
+    zone: "{{ item.zone | default(firewalld_default_zone) }}"
     permanent: true
     state: enabled
-  loop: '{{ firewall_services }}'
+  loop: "{{ firewall_services }}"
   loop_control:
-    label: '{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}'
+    label: "{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}"
   when:
     - (item.name | string) is match('^[0-9]+$')
     - item.action | default(firewall_default_action) == 'allow'
@@ -47,15 +50,16 @@
   tags:
     - firewall
     - config
+
 - name: Deny numeric ports with firewalld
   ansible.posix.firewalld:
-    port: '{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}'
-    zone: '{{ item.zone | default(firewalld_default_zone) }}'
+    port: "{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}"
+    zone: "{{ item.zone | default(firewalld_default_zone) }}"
     permanent: true
     state: disabled
-  loop: '{{ firewall_services }}'
+  loop: "{{ firewall_services }}"
   loop_control:
-    label: '{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}'
+    label: "{{ item.name }}/{{ item.protocol | default(firewall_default_protocol) }}"
   when:
     - (item.name | string) is match('^[0-9]+$')
     - item.action | default(firewall_default_action) == 'deny'
@@ -63,15 +67,16 @@
   tags:
     - firewall
     - config
+
 - name: Allow named services with firewalld
   ansible.posix.firewalld:
-    service: '{{ item.name }}'
-    zone: '{{ item.zone | default(firewalld_default_zone) }}'
+    service: "{{ item.name }}"
+    zone: "{{ item.zone | default(firewalld_default_zone) }}"
     permanent: true
     state: enabled
-  loop: '{{ firewall_services }}'
+  loop: "{{ firewall_services }}"
   loop_control:
-    label: '{{ item.name }}'
+    label: "{{ item.name }}"
   when:
     - not ((item.name | string) is match('^[0-9]+$'))
     - item.action | default(firewall_default_action) == 'allow'
@@ -79,15 +84,16 @@
   tags:
     - firewall
     - config
+
 - name: Deny named services with firewalld
   ansible.posix.firewalld:
-    service: '{{ item.name }}'
-    zone: '{{ item.zone | default(firewalld_default_zone) }}'
+    service: "{{ item.name }}"
+    zone: "{{ item.zone | default(firewalld_default_zone) }}"
     permanent: true
     state: disabled
-  loop: '{{ firewall_services }}'
+  loop: "{{ firewall_services }}"
   loop_control:
-    label: '{{ item.name }}'
+    label: "{{ item.name }}"
   when:
     - not ((item.name | string) is match('^[0-9]+$'))
     - item.action | default(firewall_default_action) == 'deny'
@@ -95,6 +101,7 @@
   tags:
     - firewall
     - config
+
 - name: Ensure established outbound traffic rule exists when default output is deny
   ansible.builtin.command:
     argv:
@@ -115,13 +122,14 @@
   changed_when: firewalld_add_established_rule.rc == 0
   failed_when:
     - firewalld_add_established_rule.rc != 0
-    - '''ALREADY_ENABLED'' not in (firewalld_add_established_rule.stderr | default(''''))'
+    - "'ALREADY_ENABLED' not in (firewalld_add_established_rule.stderr | default(''))"
   when:
     - firewall_output_default_action == 'deny'
   notify: reload firewall
   tags:
     - firewall
     - config
+
 - name: Ensure allowed outbound ports exist when default output is deny
   ansible.builtin.command:
     argv:
@@ -133,27 +141,28 @@
       - OUTPUT
       - '1'
       - -p
-      - '{{ item.protocol }}'
+      - "{{ item.protocol }}"
       - -m
-      - '{{ item.protocol }}'
+      - "{{ item.protocol }}"
       - --dport
-      - '{{ item.port }}'
+      - "{{ item.port }}"
       - -j
       - ACCEPT
-  loop: '{{ firewall_output_allow_ports }}'
+  loop: "{{ firewall_output_allow_ports }}"
   loop_control:
-    label: '{{ item.port }}/{{ item.protocol }}'
+    label: "{{ item.port }}/{{ item.protocol }}"
   register: firewalld_add_outbound_allow_rule
   changed_when: firewalld_add_outbound_allow_rule.rc == 0
   failed_when:
     - firewalld_add_outbound_allow_rule.rc != 0
-    - '''ALREADY_ENABLED'' not in (firewalld_add_outbound_allow_rule.stderr | default(''''))'
+    - "'ALREADY_ENABLED' not in (firewalld_add_outbound_allow_rule.stderr | default(''))"
   when:
     - firewall_output_default_action == 'deny'
   notify: reload firewall
   tags:
     - firewall
     - config
+
 - name: Ensure final outbound drop rule exists when default output is deny
   ansible.builtin.command:
     argv:
@@ -170,13 +179,14 @@
   changed_when: firewalld_add_drop_rule.rc == 0
   failed_when:
     - firewalld_add_drop_rule.rc != 0
-    - '''ALREADY_ENABLED'' not in (firewalld_add_drop_rule.stderr | default(''''))'
+    - "'ALREADY_ENABLED' not in (firewalld_add_drop_rule.stderr | default(''))"
   when:
     - firewall_output_default_action == 'deny'
   notify: reload firewall
   tags:
     - firewall
     - config
+
 - name: Remove established outbound traffic rule when default output is allow
   ansible.builtin.command:
     argv:
@@ -202,6 +212,7 @@
   tags:
     - firewall
     - config
+
 - name: Remove explicit allowed outbound ports when default output is allow
   ansible.builtin.command:
     argv:
@@ -213,16 +224,16 @@
       - OUTPUT
       - '1'
       - -p
-      - '{{ item.protocol }}'
+      - "{{ item.protocol }}"
       - -m
-      - '{{ item.protocol }}'
+      - "{{ item.protocol }}"
       - --dport
-      - '{{ item.port }}'
+      - "{{ item.port }}"
       - -j
       - ACCEPT
-  loop: '{{ firewall_output_allow_ports }}'
+  loop: "{{ firewall_output_allow_ports }}"
   loop_control:
-    label: '{{ item.port }}/{{ item.protocol }}'
+    label: "{{ item.port }}/{{ item.protocol }}"
   register: firewalld_remove_outbound_allow_rule
   changed_when: firewalld_remove_outbound_allow_rule.rc == 0
   failed_when: firewalld_remove_outbound_allow_rule.rc not in [0, 2]
@@ -232,6 +243,7 @@
   tags:
     - firewall
     - config
+
 - name: Remove final outbound drop rule when default output is allow
   ansible.builtin.command:
     argv:
@@ -253,29 +265,32 @@
   tags:
     - firewall
     - config
+
 - name: Assign interfaces to firewalld zones
   ansible.posix.firewalld:
-    interface: '{{ item.interface }}'
-    zone: '{{ item.zone }}'
+    interface: "{{ item.interface }}"
+    zone: "{{ item.zone }}"
     permanent: true
     state: enabled
-  loop: '{{ firewall_interface_zone }}'
+  loop: "{{ firewall_interface_zone }}"
   loop_control:
-    label: '{{ item.interface }} -> {{ item.zone }}'
+    label: "{{ item.interface }} -> {{ item.zone }}"
   when:
     - firewall_interface_zone | length > 0
   notify: reload firewall
   tags:
     - firewall
     - config
+
 - name: Flush handlers before applying runtime SSH exception
   ansible.builtin.meta: flush_handlers
   tags:
     - firewall
     - config
+
 - name: Keep current SSH port open at runtime
   ansible.posix.firewalld:
-    port: '{{ ansible_port }}/tcp'
+    port: "{{ ansible_port }}/tcp"
     permanent: false
     state: enabled
   when:

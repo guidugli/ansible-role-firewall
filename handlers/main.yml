@@ -1,15 +1,16 @@
 ---
 - name: Reload firewall ipv4 service
   ansible.builtin.service:
-    name: '{{ firewall_ipv4_service_name }}'
+    name: "{{ firewall_ipv4_service_name }}"
     state: reloaded
   listen: reload firewall
   tags:
     - firewall
     - service
+
 - name: Reload firewall ipv6 service
   ansible.builtin.service:
-    name: '{{ firewall_ipv6_service_name }}'
+    name: "{{ firewall_ipv6_service_name }}"
     state: reloaded
   listen: reload firewall
   when:
@@ -18,6 +19,7 @@
   tags:
     - firewall
     - service
+
 - name: Reload firewalld
   ansible.builtin.command:
     argv:

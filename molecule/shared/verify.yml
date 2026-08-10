@@ -2,6 +2,40 @@
 - name: Verify firewall role behavior
   hosts: all
   gather_facts: true
+  pre_tasks:
+    - name: Determine if the selected backend is supported in this Molecule context
+      ansible.builtin.set_fact:
+        firewall_molecule_backend_supported: >-
+          {{
+            not (
+              ansible_facts['distribution'] == 'Fedora'
+              and ansible_facts['service_mgr'] != 'systemd'
+            )
+          }}
+      tags:
+        - firewall
+        - validate
+
+    - name: Explain skipped firewall verification in non-systemd containers
+      ansible.builtin.debug:
+        msg: >-
+          Skipping firewalld verification on {{ inventory_hostname }} because
+          this Molecule scenario is not systemd-managed. The systemd scenario
+          covers firewalld hosts.
+      when:
+        - not firewall_molecule_backend_supported | bool
+      changed_when: false
+      tags:
+        - firewall
+        - validate
+
+    - name: End host for unsupported non-systemd firewalld verification
+      ansible.builtin.meta: end_host
+      when:
+        - not firewall_molecule_backend_supported | bool
+      tags:
+        - firewall
+        - validate
   tasks:
     - name: Gather package facts
       ansible.builtin.package_facts:
@@ -9,17 +43,27 @@
       tags:
         - firewall
         - validate
+
     - name: Gather service facts
-      ansible.builtin.service_facts: null
+      ansible.builtin.service_facts:
       tags:
         - firewall
         - validate
+
     - name: Derive expected firewall backend for verification
       ansible.builtin.set_fact:
-        firewall_effective_selected: "{{\n  'ufw'\n  if ansible_facts['distribution'] in ['Debian', 'Ubuntu']\n  else 'firewalld'\n\
-          }}"
-        firewall_effective_ipv4_service_name: "{{\n  'ufw'\n  if ansible_facts['distribution'] in ['Debian', 'Ubuntu']\n \
-          \ else 'firewalld'\n}}"
+        firewall_effective_selected: >-
+          {{
+            'ufw'
+            if ansible_facts['distribution'] in ['Debian', 'Ubuntu']
+            else 'firewalld'
+          }}
+        firewall_effective_ipv4_service_name: >-
+          {{
+            'ufw'
+            if ansible_facts['distribution'] in ['Debian', 'Ubuntu']
+            else 'firewalld'
+          }}
         firewall_effective_default_zone: public
         firewall_container_types:
           - docker
@@ -30,33 +74,62 @@
       tags:
         - firewall
         - validate
+
     - name: Determine whether UFW runtime activation checks should be skipped
       ansible.builtin.set_fact:
-        firewall_skip_ufw_runtime_checks: "{{\n  firewall_effective_selected == 'ufw'\n  and ansible_facts['virtualization_type']\
-          \ | default('')\n    in firewall_container_types\n  and ansible_facts['virtualization_role'] | default('guest')\
-          \ == 'guest'\n}}"
+        firewall_skip_ufw_runtime_checks: >-
+          {{
+            firewall_effective_selected == 'ufw'
+            and ansible_facts['virtualization_type'] | default('')
+              in firewall_container_types
+            and ansible_facts['virtualization_role'] | default('guest') == 'guest'
+          }}
       tags:
         - firewall
         - validate
+
     - name: Assert expected firewall package is installed
       ansible.builtin.assert:
         that:
-          - "(\n  firewall_effective_selected == 'firewalld'\n  and 'firewalld' in ansible_facts.packages\n) or (\n  firewall_effective_selected\
-            \ == 'ufw'\n  and 'ufw' in ansible_facts.packages\n)"
+          - >-
+            (
+              firewall_effective_selected == 'firewalld'
+              and 'firewalld' in ansible_facts.packages
+            )
+            or
+            (
+              firewall_effective_selected == 'ufw'
+              and 'ufw' in ansible_facts.packages
+            )
         quiet: true
       tags:
         - firewall
         - validate
+
     - name: Assert expected firewall service is known
       ansible.builtin.assert:
         that:
-          - "(\n  ansible_facts['service_mgr'] == 'systemd'\n  and ansible_facts.services[\n    firewall_effective_ipv4_service_name\
-            \ ~ '.service'\n  ] is defined\n) or (\n  ansible_facts['service_mgr'] != 'systemd'\n  and ansible_facts.services[\n\
-            \    firewall_effective_ipv4_service_name\n  ] is defined\n)"
+          - >-
+            (
+              ansible_facts['service_mgr'] == 'systemd'
+              and ansible_facts.services[
+                firewall_effective_ipv4_service_name ~ '.service'
+              ] is defined
+            )
+            or
+            (
+              ansible_facts['service_mgr'] != 'systemd'
+              and ansible_facts.services[
+                firewall_effective_ipv4_service_name
+              ] is defined
+            )
         quiet: true
+      when:
+        - ansible_facts['service_mgr'] == 'systemd'
       tags:
         - firewall
         - validate
+
     - name: Verify UFW status output
       ansible.builtin.command:
         argv:
@@ -71,13 +144,14 @@
       tags:
         - firewall
         - validate
+
     - name: Assert UFW is enabled and expected rules exist
       ansible.builtin.assert:
         that:
-          - '''Status: active'' in firewall_verify_ufw_status.stdout'
-          - '''19999/tcp'' in firewall_verify_ufw_status.stdout'
-          - '''18998/tcp'' in firewall_verify_ufw_status.stdout'
-          - '''9090/tcp'' not in firewall_verify_ufw_status.stdout'
+          - "'Status: active' in firewall_verify_ufw_status.stdout"
+          - "'19999/tcp' in firewall_verify_ufw_status.stdout"
+          - "'18998/tcp' in firewall_verify_ufw_status.stdout"
+          - "'9090/tcp' not in firewall_verify_ufw_status.stdout"
         quiet: true
       when:
         - firewall_effective_selected == 'ufw'
@@ -85,15 +159,19 @@
       tags:
         - firewall
         - validate
+
     - name: Explain why UFW runtime checks are skipped
       ansible.builtin.debug:
-        msg: Skipping UFW runtime verification on a container guest because UFW activation may be intentionally skipped when
-          sysctl changes are restricted by the container runtime.
+        msg: >-
+          Skipping UFW runtime verification on a container guest because UFW
+          activation may be intentionally skipped when sysctl changes are
+          restricted by the container runtime.
       when:
         - firewall_skip_ufw_runtime_checks
       tags:
         - firewall
         - validate
+
     - name: Query firewalld default zone
       ansible.builtin.command:
         argv:
@@ -106,6 +184,7 @@
       tags:
         - firewall
         - validate
+
     - name: Query custom firewalld service ports for kodi
       ansible.builtin.command:
         argv:
@@ -120,11 +199,12 @@
       tags:
         - firewall
         - validate
+
     - name: Query firewalld SSH service state
       ansible.builtin.command:
         argv:
           - firewall-cmd
-          - --zone={{ firewall_effective_default_zone }}
+          - "--zone={{ firewall_effective_default_zone }}"
           - --query-service=ssh
       register: firewall_verify_firewalld_ssh
       changed_when: false
@@ -133,11 +213,12 @@
       tags:
         - firewall
         - validate
+
     - name: Query firewalld cockpit service state
       ansible.builtin.command:
         argv:
           - firewall-cmd
-          - --zone={{ firewall_effective_default_zone }}
+          - "--zone={{ firewall_effective_default_zone }}"
           - --query-service=cockpit
       register: firewall_verify_firewalld_cockpit
       changed_when: false
@@ -147,44 +228,17 @@
       tags:
         - firewall
         - validate
+
     - name: Assert firewalld state matches the test scenario
       ansible.builtin.assert:
         that:
           - firewall_verify_firewalld_zone.stdout == firewall_effective_default_zone
-          - '''18998/tcp'' in firewall_verify_firewalld_kodi_ports.stdout'
+          - "'18998/tcp' in firewall_verify_firewalld_kodi_ports.stdout"
           - firewall_verify_firewalld_ssh.rc == 0
           - firewall_verify_firewalld_cockpit.rc == 1
         quiet: true
       when:
         - firewall_effective_selected == 'firewalld'
-      tags:
-        - firewall
-        - validate
-  tags:
-    - firewall
-    - validate
-  pre_tasks:
-    - name: Determine whether the selected firewall backend is supported in this Molecule context
-      ansible.builtin.set_fact:
-        firewall_molecule_backend_supported: '{{ not (ansible_facts[''distribution''] == ''Fedora'' and ansible_facts[''service_mgr'']
-          != ''systemd'') }}'
-      tags:
-        - firewall
-        - validate
-    - name: Explain skipped firewall verification for non-systemd firewalld containers
-      ansible.builtin.debug:
-        msg: Skipping firewalld verification on {{ inventory_hostname }} because this Molecule scenario is not systemd-managed.
-          The systemd scenario covers firewalld hosts.
-      when:
-        - not firewall_molecule_backend_supported | bool
-      changed_when: false
-      tags:
-        - firewall
-        - validate
-    - name: End host for unsupported non-systemd firewalld Molecule verification
-      ansible.builtin.meta: end_host
-      when:
-        - not firewall_molecule_backend_supported | bool
       tags:
         - firewall
         - validate

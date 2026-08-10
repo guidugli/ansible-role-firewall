@@ -61,7 +61,7 @@
     - firewall
     - validate
 
-- name: Refresh apt package cache (Debian/Ubuntu)
+- name: Refresh apt package cache on APT-based systems
   ansible.builtin.apt:
     update_cache: true
   changed_when: false

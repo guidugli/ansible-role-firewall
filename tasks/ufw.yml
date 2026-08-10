@@ -13,8 +13,8 @@
 - name: Explain why UFW runtime configuration is skipped
   ansible.builtin.debug:
     msg: >-
-      Skipping UFW runtime configuration on a container guest because UFW
-      rule management calls iptables/nftables and container runtimes commonly
+      Skipping UFW runtime configuration on a container guest because UFW rule
+      management calls iptables/nftables and container runtimes commonly
       restrict the required kernel firewall capabilities.
   when:
     - firewall_skip_ufw_runtime_configuration | bool

@@ -6,6 +6,7 @@
   tags:
     - firewall
     - validate
+
 - name: Read sysctl net.ipv6.conf.all.disable_ipv6
   ansible.builtin.command:
     argv:
@@ -18,6 +19,7 @@
   tags:
     - firewall
     - validate
+
 - name: Read sysctl net.ipv6.conf.default.disable_ipv6
   ansible.builtin.command:
     argv:
@@ -30,10 +32,15 @@
   tags:
     - firewall
     - validate
+
 - name: Set IPv6 support fact
   ansible.builtin.set_fact:
-    firewall_ipv6_enabled: "{{\n  firewall_ipv6_proc.stat.exists | default(false)\n  and (firewall_ipv6_all_disable.stdout\
-      \ | default('0') | trim == '0')\n  and (firewall_ipv6_default_disable.stdout | default('0') | trim == '0')\n}}"
+    firewall_ipv6_enabled: >-
+      {{
+        firewall_ipv6_proc.stat.exists | default(false)
+        and (firewall_ipv6_all_disable.stdout | default('0') | trim == '0')
+        and (firewall_ipv6_default_disable.stdout | default('0') | trim == '0')
+      }}
   tags:
     - firewall
     - validate
