@@ -1,81 +1,51 @@
-# Ansible Role: firewall
-
 [![CI](https://github.com/guidugli/ansible-role-firewall/actions/workflows/CI.yml/badge.svg)](https://github.com/guidugli/ansible-role-firewall/actions/workflows/CI.yml)
-[![Release](https://github.com/guidugli/ansible-role-firewall/actions/workflows/release.yml/badge.svg)](https://github.com/guidugli/ansible-role-firewall/actions/workflows/release.yml)
-[![Galaxy](https://img.shields.io/badge/galaxy-guidugli.firewall-blue.svg)](https://galaxy.ansible.com/ui/standalone/roles/guidugli/firewall/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/tag/guidugli/ansible-role-firewall?label=release)](https://github.com/guidugli/ansible-role-firewall/tags)
+[![Galaxy](https://img.shields.io/badge/galaxy-guidugli.firewall-blue)](https://galaxy.ansible.com/ui/standalone/roles/guidugli/firewall/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-## Overview
+## Ansible Role: firewall
 
-This role installs and configures a host firewall using either **firewalld** or **ufw** on the supported platforms declared in `meta/main.yml`.
+Install and configure the selected Linux host firewall backend using either firewalld or UFW. The role keeps privilege escalation external to the caller, validates public inputs through argument specs and semantic assertions, and is structured for template-aligned CI, linting, and Molecule coverage.
 
-The role follows a modernized structure with:
+### Requirements
 
-- explicit public defaults in `defaults/main.yml`
-- automatic input validation through `meta/argument_specs.yml`
-- semantic validation in `tasks/assert.yml`
-- clean task dispatch in `tasks/main.yml`
-- generated metadata with `templates/meta_main.yml.j2` as the source of truth
-- shared Molecule verification content in `molecule/shared/`
+- Ansible Core compatible with the role metadata.
+- Linux targets using a supported package manager and service manager for the selected backend.
+- Root-level permissions are required on real hosts for package installation, service management, `/etc/default/ufw`, firewalld runtime/permanent configuration, and firewall rule changes. Provide privilege externally with `become: true` in the play or automation platform.
+- Collections from `requirements.yml`: `containers.podman`, `ansible.posix`, and `community.general`, each with an explicit minimum version.
 
-## Features
+### Features
 
-- installs the selected firewall backend and starts the related service
-- stops conflicting firewall services when they are present
-- supports named services and direct port rules
-- supports firewalld custom services through `firewall_service_mapping`
-- supports optional outgoing-policy tightening through `firewall_output_default_action`
-- keeps behavior idempotent and readable
+- Selects a default backend from the target distribution while allowing `firewall_selected` override.
+- Installs the required backend packages for firewalld or UFW.
+- Stops known conflicting firewall services when service facts show they are present.
+- Manages named services, numeric ports, optional firewalld zones, and custom service mappings.
+- Supports optional outbound default-deny posture with explicit allowed egress ports.
+- Detects IPv6 availability and avoids enabling unsupported UFW IPv6 behavior.
+- Keeps SSH connectivity safer by preserving the active SSH port at runtime for SSH-based connections.
+- Includes shared Molecule converge and verify playbooks for default and systemd scenarios.
 
-## Supported platforms
+### Supported platforms
 
-Current metadata declares support for:
+Role metadata declares support for Fedora, Ubuntu, and Debian. The repository Molecule shared matrix covers Ubuntu 26.04 and 24.04, Debian 13 and 12, and Fedora 44 and 43 in Podman-backed scenarios.
 
-- Fedora 42 and 43
-- Ubuntu 22.04 (jammy) and 24.04 (noble)
-- Debian 12 (bookworm) and 13 (trixie)
+### Variables
 
-## Role variables
+All public inputs are defined in `defaults/main.yml` and mirrored in `meta/argument_specs.yml`.
 
-Defaults are defined in `defaults/main.yml`.
+| Variable | Type | Default | Description |
+| --- | --- | --- | --- |
+| `firewall_selected` | string | `{{ _suggested_os_firewall }}` | Firewall backend to configure. Valid values are `firewalld` and `ufw`. The default is derived from the distribution in `vars/main.yml`. |
+| `firewalld_default_zone` | string | `public` | Default firewalld zone used when a rule does not set `zone`. Applies only when `firewall_selected` is `firewalld`. |
+| `firewall_default_protocol` | string | `tcp` | Protocol used for numeric port rules when an item in `firewall_services` does not define `protocol`. Valid values are `tcp` and `udp`. |
+| `firewall_default_action` | string | `allow` | Action used when a `firewall_services` item does not define `action`. Valid values are `allow` and `deny`. |
+| `firewall_interface_zone` | list(dict) | `[]` | Optional firewalld interface-to-zone mappings. Each item requires `interface` and `zone`. This is valid only with firewalld. |
+| `firewall_service_mapping` | list(dict) | `[]` | Maps service names to one or more `port/protocol` strings. Used for custom firewalld services and for expanding named services into UFW port rules. |
+| `firewall_output_default_action` | string | `allow` | Default outgoing policy. Use `deny` to add only the ports listed in `firewall_output_allow_ports`. |
+| `firewall_output_allow_ports` | list(dict) | HTTP, HTTPS, DNS, and DHCP ports | Outgoing ports allowed when `firewall_output_default_action` is `deny`. Each item requires integer `port` and `protocol`. |
+| `firewall_services` | list(dict) | `[]` | Inbound services or ports to manage. Each item requires `name`; optional keys are `action`, `protocol`, and firewalld-only `zone`. |
 
-### Public variables
-
-```yaml
----
-firewall_selected: "{{ _suggested_os_firewall }}"
-firewalld_default_zone: public
-firewall_default_protocol: tcp
-firewall_default_action: allow
-firewall_interface_zone: []
-firewall_service_mapping: []
-firewall_output_default_action: allow
-firewall_output_allow_ports:
-  - port: 80
-    protocol: tcp
-  - port: 443
-    protocol: tcp
-  - port: 53
-    protocol: tcp
-  - port: 53
-    protocol: udp
-  - port: 67
-    protocol: tcp
-  - port: 67
-    protocol: udp
-firewall_services: []
-```
-
-### `firewall_services`
-
-Each item may define:
-
-- `name`: required; a service name (for example `ssh`) or a numeric port
-- `action`: optional; `allow` or `deny`
-- `protocol`: optional; `tcp` or `udp`
-- `zone`: optional; firewalld only
-
-Example:
+#### `firewall_services` examples
 
 ```yaml
 firewall_services:
@@ -84,19 +54,16 @@ firewall_services:
     action: deny
   - name: 8443
     protocol: tcp
+    action: allow
 ```
 
-### `firewall_service_mapping`
-
-Useful when a service name is not natively known by the target backend.
-
-Example:
+#### `firewall_service_mapping` examples
 
 ```yaml
 firewall_service_mapping:
-  - name: cockpit
+  - name: api
     ports:
-      - 9090/tcp
+      - 8443/tcp
   - name: kodi
     short: Allows kodi remotes
     description: Allows kodi remote controls to connect
@@ -104,28 +71,20 @@ firewall_service_mapping:
       - 18998/tcp
 ```
 
-## How it works
+### Example Playbook
 
-1. Optional SSH-port detection runs for SSH-based connections.
-2. Ansible applies `meta/argument_specs.yml` automatically.
-3. `tasks/assert.yml` performs semantic checks that do not belong in argument specs.
-4. The role installs the selected backend and disables conflicting services if present.
-5. Backend-specific tasks apply rules for `firewalld` or `ufw`.
-
-## Usage
-
-### Standard usage
+#### Minimal example
 
 ```yaml
 ---
-- name: Configure firewall
+- name: Configure host firewall
   hosts: all
   become: true
   roles:
     - role: guidugli.firewall
 ```
 
-### Example with explicit backend and custom rules
+#### Explicit UFW backend with outbound default deny
 
 ```yaml
 ---
@@ -137,55 +96,75 @@ firewall_service_mapping:
     firewall_output_default_action: deny
     firewall_services:
       - name: ssh
-      - name: api
-    firewall_service_mapping:
-      - name: api
-        ports:
-          - 8443/tcp
+      - name: 8443
+        protocol: tcp
   roles:
     - role: guidugli.firewall
 ```
 
-## Design notes
+#### Explicit firewalld backend with custom service mapping
 
-- **Privilege escalation**: the role does not force `become` in tasks or handlers. Callers should set `become: true` in the play when required.
-- **Validation model**: argument specs validate shape and type; `tasks/assert.yml` validates semantics and role-specific constraints.
-- **Metadata source of truth**: `templates/meta_main.yml.j2` should be updated first, then `meta/main.yml` regenerated.
-- **Molecule shared structure**: `molecule/shared/verify.yml` is provided so scenario files can reuse shared verification logic once the standard scenario wiring is in place.
+```yaml
+---
+- name: Configure firewalld custom service
+  hosts: app
+  become: true
+  vars:
+    firewall_selected: firewalld
+    firewall_service_mapping:
+      - name: api
+        short: API service
+        description: Application API listener
+        ports:
+          - 8443/tcp
+    firewall_services:
+      - name: api
+        zone: public
+  roles:
+    - role: guidugli.firewall
+```
 
-## Molecule testing
-
-Recommended commands:
+### Molecule Testing Instructions
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+ansible-galaxy collection install -r requirements.yml
+python3 scripts/update_matrix.py
+python3 scripts/render_inventory.py
 yamllint .
-ansible-lint
+ansible-lint .
 molecule test -s default
 molecule test -s systemd
 ```
 
-## Release workflow
+The shared scenario content is under `molecule/shared/`. Scenario inventories are generator-managed and should be refreshed from `molecule/shared/vars.yml` instead of edited directly.
 
-- CI runs linting and Molecule tests.
-- Release publishing is handled by the repository release workflow.
-- Metadata should be regenerated from the template before tagging a release.
+### Execution Notes
 
-## Repository structure
+- **Privilege model:** the role never declares `become`, `become_user`, or `become_method` in role tasks, handlers, or shared Molecule logic. Use `become: true` externally for real hosts when package, service, or firewall changes require elevated privileges.
+- **Container behavior:** Molecule containers generally run as root and scenario converge uses external execution context. UFW runtime rule management and non-systemd container service management are skipped because container runtimes commonly restrict kernel firewall capabilities and init/service state is not stable in ordinary containers.
+- **APT cache behavior:** the default Molecule prepare step removes package lists to reduce image size, so the role refreshes apt metadata as a separate non-changing task before package installation.
+- **Molecule default scenario:** non-systemd containers do not exercise firewalld on Fedora; those hosts are ended early in `molecule/shared/converge.yml` and `molecule/shared/verify.yml`. The systemd scenario is the coverage path for firewalld.
+- **Systemd behavior:** firewalld requires a systemd-managed target. Systemd-backed container coverage is provided by the systemd Molecule scenario, while role logic guards firewalld use on non-systemd hosts.
+- **Idempotency:** commands that inspect state set `changed_when: false`; commands that modify firewall state are guarded by existing state checks, module idempotency, accepted return codes, or explicit change handling.
 
-```text
-defaults/
-handlers/
-meta/
-molecule/
-tasks/
-templates/
-vars/
+### Release workflow
+
+Generated metadata and inventories are refreshed through repository generator scripts before a release:
+
+```bash
+./scripts/update_release_metadata.sh
+./scripts/release.sh --version v1.2.0 --message "Release v1.2.0"
 ```
 
-## License
+The release workflow imports tagged releases into Ansible Galaxy. Keep generated files, scenario inventories, `.github/`, and `scripts/` under generator control.
+
+### License
 
 MIT
 
-## Author
+### Author
 
 Carlos Guidugli

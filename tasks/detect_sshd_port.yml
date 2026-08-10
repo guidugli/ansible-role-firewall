@@ -1,27 +1,24 @@
 ---
 - name: Preserve currently configured SSH port
   ansible.builtin.set_fact:
-    configured_port: "{{ ansible_port | default('22') }}"
-  tags: [facts]
-
+    configured_port: '{{ ansible_port | default(''22'') }}'
+  tags:
+    - firewall
+    - validate
 - name: Check if target host is reachable on TCP port 22
   ansible.builtin.wait_for:
-    host: >-
-      {{
-        ansible_host
-        | default(inventory_hostname)
-        | default(ansible_ssh_host | default(inventory_hostname))
-      }}
+    host: "{{\n  ansible_host\n  | default(inventory_hostname)\n  | default(ansible_ssh_host | default(inventory_hostname))\n\
+      }}"
     port: 22
     state: started
     connect_timeout: 5
     timeout: 10
   delegate_to: localhost
-  become: false
   ignore_errors: true
   register: default_ssh
-  tags: [facts]
-
+  tags:
+    - firewall
+    - validate
 - name: Use TCP port 22 when it is reachable
   ansible.builtin.set_fact:
     ansible_port: '22'
@@ -29,47 +26,46 @@
     - default_ssh is defined
     - not default_ssh.failed
   register: ssh_port_set
-  tags: [facts]
-
+  tags:
+    - firewall
+    - validate
 - name: Check if target host is reachable on configured SSH port
   ansible.builtin.wait_for:
-    host: >-
-      {{
-        ansible_host
-        | default(inventory_hostname)
-        | default(ansible_ssh_host | default(inventory_hostname))
-      }}
-    port: "{{ configured_port }}"
+    host: "{{\n  ansible_host\n  | default(inventory_hostname)\n  | default(ansible_ssh_host | default(inventory_hostname))\n\
+      }}"
+    port: '{{ configured_port }}'
     state: started
     connect_timeout: 5
     timeout: 10
   delegate_to: localhost
-  become: false
   ignore_errors: true
   register: configured_ssh
   when:
     - default_ssh is defined
     - default_ssh.failed
-  tags: [facts]
-
+  tags:
+    - firewall
+    - validate
 - name: Keep configured SSH port when it is reachable
   ansible.builtin.set_fact:
-    ansible_port: "{{ configured_port }}"
+    ansible_port: '{{ configured_port }}'
   when:
     - configured_ssh is defined
     - not configured_ssh.failed
   register: ssh_port_set
-  tags: [facts]
-
+  tags:
+    - firewall
+    - validate
 - name: Fail when the SSH port cannot be auto-detected
   ansible.builtin.fail:
-    msg: >-
-      Unable to reach {{ inventory_hostname }} on TCP port 22 or
-      configured TCP port {{ configured_port }}.
+    msg: Unable to reach {{ inventory_hostname }} on TCP port 22 or configured TCP port {{ configured_port }}.
   when:
     - ssh_port_set is undefined
-  tags: [facts]
-
+  tags:
+    - firewall
+    - validate
 - name: Gather deferred facts after SSH port detection
-  ansible.builtin.setup:
-  tags: [facts]
+  ansible.builtin.setup: null
+  tags:
+    - firewall
+    - validate

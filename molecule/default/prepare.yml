@@ -28,3 +28,11 @@
         rm -rf /var/cache/dnf/* /tmp/* /var/tmp/*'
       when: "'ID=fedora' in osr.stdout"
       changed_when: true
+
+- name: Check for role extra tasks
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Include shared prepare tasks if present
+      ansible.builtin.include_tasks: ../shared/prepare_tasks.yml
+      when: lookup('ansible.builtin.fileglob', '../shared/prepare_tasks.yml', wantlist=True) | length > 0

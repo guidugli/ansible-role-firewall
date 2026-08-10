@@ -4,112 +4,111 @@
     argv:
       - firewall-cmd
       - --permanent
-      - "--service={{ item.name }}"
+      - --service={{ item.name }}
       - --get-ports
   register: firewalld_get_ports_cmd
   changed_when: false
   failed_when: firewalld_get_ports_cmd.rc not in [0, 101]
-  tags: [config]
-
+  tags:
+    - firewall
+    - config
 - name: Create custom firewalld service when missing
   ansible.builtin.command:
     argv:
       - firewall-cmd
       - --permanent
-      - "--new-service={{ item.name }}"
+      - --new-service={{ item.name }}
   when:
     - firewalld_get_ports_cmd.rc == 101
   changed_when: true
   notify: reload firewall
-  tags: [config]
-
+  tags:
+    - firewall
+    - config
 - name: Set custom firewalld service description when provided for a new service
   ansible.builtin.command:
     argv:
       - firewall-cmd
       - --permanent
-      - "--service={{ item.name }}"
-      - "--set-description={{ item.description }}"
+      - --service={{ item.name }}
+      - --set-description={{ item.description }}
   when:
     - firewalld_get_ports_cmd.rc == 101
     - item.description is defined
     - item.description | string | trim | length > 0
   changed_when: true
   notify: reload firewall
-  tags: [config]
-
+  tags:
+    - firewall
+    - config
 - name: Set custom firewalld service short description when provided for a new service
   ansible.builtin.command:
     argv:
       - firewall-cmd
       - --permanent
-      - "--service={{ item.name }}"
-      - "--set-short={{ item.short }}"
+      - --service={{ item.name }}
+      - --set-short={{ item.short }}
   when:
     - firewalld_get_ports_cmd.rc == 101
     - item.short is defined
     - item.short | string | trim | length > 0
   changed_when: true
   notify: reload firewall
-  tags: [config]
-
+  tags:
+    - firewall
+    - config
 - name: Build current and desired firewalld service port sets
   ansible.builtin.set_fact:
-    firewalld_current_service_ports: >-
-      {{
-        firewalld_get_ports_cmd.stdout.split()
-        if firewalld_get_ports_cmd.rc == 0
-        else []
-      }}
-    firewalld_desired_service_ports: "{{ item.ports | default([]) }}"
-  tags: [config]
-
+    firewalld_current_service_ports: "{{\n  firewalld_get_ports_cmd.stdout.split()\n  if firewalld_get_ports_cmd.rc == 0\n\
+      \  else []\n}}"
+    firewalld_desired_service_ports: '{{ item.ports | default([]) }}'
+  tags:
+    - firewall
+    - config
 - name: Build firewalld service port delta
   ansible.builtin.set_fact:
-    firewalld_service_ports_to_remove: >-
-      {{
-        firewalld_current_service_ports
-        | difference(firewalld_desired_service_ports)
-      }}
-    firewalld_service_ports_to_add: >-
-      {{
-        firewalld_desired_service_ports
-        | difference(firewalld_current_service_ports)
-      }}
-  tags: [config]
-
+    firewalld_service_ports_to_remove: "{{\n  firewalld_current_service_ports\n  | difference(firewalld_desired_service_ports)\n\
+      }}"
+    firewalld_service_ports_to_add: "{{\n  firewalld_desired_service_ports\n  | difference(firewalld_current_service_ports)\n\
+      }}"
+  tags:
+    - firewall
+    - config
 - name: Remove stale ports from custom firewalld service
   ansible.builtin.command:
     argv:
       - firewall-cmd
       - --permanent
-      - "--service={{ item.name }}"
-      - "--remove-port={{ portitem }}"
-  loop: "{{ firewalld_service_ports_to_remove }}"
+      - --service={{ item.name }}
+      - --remove-port={{ portitem }}
+  loop: '{{ firewalld_service_ports_to_remove }}'
   loop_control:
     loop_var: portitem
-    label: "{{ item.name }} -> {{ portitem }}"
+    label: '{{ item.name }} -> {{ portitem }}'
   register: firewalld_remove_port_result
   changed_when: firewalld_remove_port_result.rc == 0
   notify: reload firewall
   when:
     - firewalld_service_ports_to_remove | length > 0
-  tags: [config]
-
+  tags:
+    - firewall
+    - config
 - name: Add missing ports to custom firewalld service
   ansible.builtin.command:
     argv:
       - firewall-cmd
       - --permanent
-      - "--service={{ item.name }}"
-      - "--add-port={{ portitem }}"
-  loop: "{{ firewalld_service_ports_to_add }}"
+      - --service={{ item.name }}
+      - --add-port={{ portitem }}
+  loop: '{{ firewalld_service_ports_to_add }}'
   loop_control:
     loop_var: portitem
-    label: "{{ item.name }} -> {{ portitem }}"
+    label: '{{ item.name }} -> {{ portitem }}'
   register: firewalld_add_port_result
   changed_when: firewalld_add_port_result.rc == 0
   notify: reload firewall
   when:
     - firewalld_service_ports_to_add | length > 0
-  tags: [config]
+  tags:
+    - firewall
+    - config

@@ -1,5 +1,6 @@
 ---
 # tasks/main.yml — guidugli.firewall
+#
 # Purpose: Validate inputs, install firewall packages, detect host capabilities,
 # and dispatch backend-specific firewall configuration.
 
@@ -7,11 +8,15 @@
   ansible.builtin.import_tasks: detect_sshd_port.yml
   when:
     - ansible_connection | default('ssh') in ['ssh', 'paramiko']
-  tags: [facts]
+  tags:
+    - firewall
+    - validate
 
 - name: Run semantic assertions
   ansible.builtin.import_tasks: assert.yml
-  tags: [validate]
+  tags:
+    - firewall
+    - validate
 
 - name: Fail when firewalld is requested on a non-systemd target
   ansible.builtin.fail:
@@ -19,29 +24,64 @@
   when:
     - firewall_selected == 'firewalld'
     - ansible_facts['service_mgr'] | default('unknown') != 'systemd'
-  tags: [validate]
+  tags:
+    - firewall
+    - validate
+
+- name: Determine whether service management is supported in this execution context
+  ansible.builtin.set_fact:
+    firewall_service_management_supported: >-
+      {{
+        not (
+          ansible_facts['virtualization_type'] | default('') in _container_types
+          and ansible_facts['virtualization_role'] | default('guest') == 'guest'
+          and ansible_facts['service_mgr'] | default('unknown') != 'systemd'
+        )
+      }}
+  tags:
+    - firewall
+    - validate
+
+- name: Explain skipped service management in non-systemd container guests
+  ansible.builtin.debug:
+    msg: >-
+      Skipping firewall service management on a non-systemd container guest.
+      Package installation and static validation still run; runtime service
+      management is covered by real hosts and by the systemd Molecule scenario.
+  when:
+    - not firewall_service_management_supported | bool
+  changed_when: false
+  tags:
+    - firewall
+    - validate
 
 - name: Gather installed service facts
   ansible.builtin.service_facts:
-  tags: [facts]
+  tags:
+    - firewall
+    - validate
 
-- name: Update apt package cache (Debian/Ubuntu)
+- name: Refresh apt package cache (Debian/Ubuntu)
   ansible.builtin.apt:
     update_cache: true
+  changed_when: false
   when:
     - ansible_facts['pkg_mgr'] | default('') == 'apt'
-  tags: [install]
+  tags:
+    - firewall
+    - install
 
 - name: Install required firewall packages on APT-based systems
   ansible.builtin.apt:
     name: "{{ firewall_packages_required }}"
     state: present
-    update_cache: true
   when:
     - ansible_facts['pkg_mgr'] | default('') == 'apt'
     - firewall_packages_required is defined
     - firewall_packages_required | length > 0
-  tags: [install]
+  tags:
+    - firewall
+    - install
 
 - name: Install required firewall packages on non-APT systems
   ansible.builtin.package:
@@ -51,7 +91,9 @@
     - ansible_facts['pkg_mgr'] | default('') != 'apt'
     - firewall_packages_required is defined
     - firewall_packages_required | length > 0
-  tags: [install]
+  tags:
+    - firewall
+    - install
 
 - name: Disable conflicting firewall services when present
   ansible.builtin.service:
@@ -60,6 +102,7 @@
     state: stopped
   loop: "{{ firewall_conflicting_services | default([]) }}"
   when:
+    - firewall_service_management_supported | bool
     - firewall_conflicting_services is defined
     - firewall_conflicting_services | length > 0
     - >-
@@ -67,18 +110,20 @@
         ansible_facts['service_mgr'] | default('') == 'systemd'
         and ansible_facts.services[item ~ '.service'] is defined
         and ansible_facts.services[item ~ '.service'].status != 'not-found'
-      )
-      or
-      (
+      ) or (
         ansible_facts['service_mgr'] | default('') != 'systemd'
         and ansible_facts.services[item] is defined
         and ansible_facts.services[item].status != 'not-found'
       )
-  tags: [service]
+  tags:
+    - firewall
+    - service
 
 - name: Detect IPv6 support
   ansible.builtin.import_tasks: check_ipv6_support.yml
-  tags: [facts]
+  tags:
+    - firewall
+    - validate
 
 - name: Disable IPv6 in UFW defaults when unsupported by the host
   ansible.builtin.lineinfile:
@@ -88,15 +133,23 @@
   when:
     - firewall_selected == 'ufw'
     - not firewall_ipv6_enabled | default(false)
-  tags: [config]
+  tags:
+    - firewall
+    - config
 
 - name: Ensure primary firewall service is enabled and started
   ansible.builtin.service:
     name: "{{ firewall_ipv4_service_name }}"
     state: started
     enabled: true
-  tags: [service]
+  when:
+    - firewall_service_management_supported | bool
+  tags:
+    - firewall
+    - service
 
 - name: Apply backend-specific firewall tasks
   ansible.builtin.include_tasks: "{{ firewall_selected }}.yml"
-  tags: [config]
+  tags:
+    - firewall
+    - config
