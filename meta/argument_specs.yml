@@ -4,11 +4,8 @@ argument_specs:
         short_description: Validate public variables for the firewall role.
         options:
             firewall_selected:
-                type: str
-                default: "{{ _suggested_os_firewall }}"
-                choices:
-                    - firewalld
-                    - ufw
+                type: raw
+                default: null
                 description:
                     - Firewall backend to configure on supported platforms.
             firewalld_default_zone:

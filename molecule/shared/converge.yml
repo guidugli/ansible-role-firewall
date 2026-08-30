@@ -3,7 +3,6 @@
   hosts: all
   gather_facts: true
   vars:
-    firewall_selected: "{{ _suggested_os_firewall }}"
     firewalld_default_zone: public
     firewall_default_protocol: tcp
     firewall_default_action: allow
@@ -38,7 +37,18 @@
     - name: Determine if the selected backend is supported in this Molecule context
       ansible.builtin.set_fact:
         firewall_molecule_backend_supported: >-
-          {{ firewall_selected != 'firewalld' or ansible_facts['service_mgr'] == 'systemd' }}
+          {{
+            (
+              firewall_selected
+              | default(
+                  'ufw'
+                  if ansible_facts['distribution'] in ['Debian', 'Ubuntu']
+                  else 'firewalld',
+                  true
+                )
+            ) != 'firewalld'
+            or ansible_facts['service_mgr'] == 'systemd'
+          }}
       tags:
         - firewall
         - validate
@@ -68,3 +78,25 @@
       tags:
         - firewall
         - config
+
+  post_tasks:
+    - name: Derive expected distribution-aware firewall default
+      ansible.builtin.set_fact:
+        firewall_molecule_expected_selected: >-
+          {{
+            'ufw'
+            if ansible_facts['distribution'] in ['Debian', 'Ubuntu']
+            else 'firewalld'
+          }}
+      tags:
+        - firewall
+        - validate
+
+    - name: Assert distribution-aware firewall default was selected
+      ansible.builtin.assert:
+        that:
+          - firewall_selected == firewall_molecule_expected_selected
+        quiet: true
+      tags:
+        - firewall
+        - validate

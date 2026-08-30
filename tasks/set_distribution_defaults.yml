@@ -1,0 +1,18 @@
+---
+- name: Gather facts required for distribution defaults
+  ansible.builtin.setup:
+  when:
+    - ansible_facts['distribution'] is not defined
+    - ansible_connection | default('ssh') not in ['ssh', 'paramiko']
+  tags:
+    - firewall
+    - validate
+
+- name: Set distribution-aware firewall default
+  ansible.builtin.set_fact:
+    firewall_selected: "{{ _suggested_os_firewall }}"
+  when:
+    - firewall_selected is none or firewall_selected | string | trim | length == 0
+  tags:
+    - firewall
+    - config

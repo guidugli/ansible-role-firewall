@@ -1,5 +1,5 @@
 ---
-firewall_selected: "{{ _suggested_os_firewall }}"
+firewall_selected: null
 
 firewalld_default_zone: public
 firewall_default_protocol: tcp

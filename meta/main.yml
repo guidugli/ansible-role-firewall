@@ -1,30 +1,29 @@
 ---
 # Generated file. Do not edit directly.
-# Source template: templates/meta_main.yml.j2
+# Source template: meta_main.yml.j2
 
 dependencies: []
-
 galaxy_info:
-  role_name: firewall
+  role_name: audit
   namespace: guidugli
-  author: Carlos Guidugli
-  description: Manage host firewall configuration with firewalld or ufw.
-  company: Kyndryl
+  author: guidugli
+  company: Creuzo Tech
+  description: >-
+    Manage host firewall configuration with firewalld or ufw.
   license: MIT
-  min_ansible_version: '2.16'
+  min_ansible_version: '2.14'
   platforms:
     - name: Fedora
       versions:
-        - '43'
-        - '42'
+        - "all"
     - name: Ubuntu
       versions:
-        - noble
-        - jammy
+        - "resolute"
+        - "noble"
     - name: Debian
       versions:
-        - trixie
-        - bookworm
+        - "trixie"
+        - "bookworm"
   galaxy_tags:
     - firewall
     - system

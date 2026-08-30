@@ -16,13 +16,13 @@ Install and configure a Linux host firewall using either firewalld or UFW. The r
 
 ### Features
 
-- Selects a default backend from the target distribution while allowing `firewall_selected` override.
+- Selects a default backend from gathered distribution facts after SSH port detection, while preserving a caller-provided `firewall_selected` override.
 - Installs required backend packages for firewalld or UFW.
 - Stops known conflicting firewall services when supported by the execution context.
 - Manages named services, numeric ports, optional firewalld zones, and custom service mappings.
 - Supports optional default-deny outbound policy with explicit allowed egress ports.
 - Detects IPv6 availability and avoids enabling unsupported UFW IPv6 behavior.
-- Keeps SSH connectivity safer by preserving the active SSH port at runtime for SSH connections.
+- Detects the reachable SSH port before gathering deferred facts, then resolves distribution-aware defaults and preserves the active SSH port at runtime.
 - Provides default and systemd Molecule scenario support through shared converge and verify logic.
 
 ### Supported platforms
@@ -35,7 +35,7 @@ All public inputs are defined in `defaults/main.yml` and mirrored in `meta/argum
 
 | Variable | Type | Default | Description |
 | --- | --- | --- | --- |
-| `firewall_selected` | string | `{{ _suggested_os_firewall }}` | Firewall backend. Valid values are `firewalld` and `ufw`. |
+| `firewall_selected` | string | `null (resolved after SSH detection)` | Firewall backend. Valid values are `firewalld` and `ufw`. |
 | `firewalld_default_zone` | string | `public` | Default firewalld zone when a rule does not define `zone`. |
 | `firewall_default_protocol` | string | `tcp` | Default protocol for numeric port rules. Valid values are `tcp` and `udp`. |
 | `firewall_default_action` | string | `allow` | Default action for `firewall_services`. Valid values are `allow` and `deny`. |

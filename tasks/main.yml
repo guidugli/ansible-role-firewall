@@ -12,6 +12,12 @@
     - firewall
     - validate
 
+- name: Apply distribution-aware defaults after connection detection
+  ansible.builtin.import_tasks: set_distribution_defaults.yml
+  tags:
+    - firewall
+    - config
+
 - name: Run semantic assertions
   ansible.builtin.import_tasks: assert.yml
   tags:
