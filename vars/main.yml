@@ -31,69 +31,8 @@ _preferred_os_firewall:
   Debian: ufw
   Ubuntu: ufw
 
-_distribution_key: >-
-  {{
-    ansible_facts['distribution']
-    ~ '-'
-    ~ ansible_facts['distribution_major_version']
-  }}
-
-_suggested_os_firewall: >-
-  {{
-    _preferred_os_firewall[_distribution_key]
-    | default(_preferred_os_firewall[ansible_facts['distribution']])
-    | default(_preferred_os_firewall['default'])
-  }}
-
-_selected_firewall_info: >-
-  {{
-    _firewalld_info
-    if firewall_selected == 'firewalld'
-    else _ufw_info
-  }}
-
-firewall_packages_required: >-
-  {{
-    _selected_firewall_info['packages'][_distribution_key]
-    | default(
-        _selected_firewall_info['packages'][ansible_facts['distribution']]
-      )
-    | default(_selected_firewall_info['packages']['default'])
-  }}
-
-firewall_conflicting_services: >-
-  {{
-    _selected_firewall_info['conflicting_services'][_distribution_key]
-    | default(
-        _selected_firewall_info['conflicting_services'][
-          ansible_facts['distribution']
-        ]
-      )
-    | default(_selected_firewall_info['conflicting_services']['default'])
-  }}
-
-firewall_ipv4_service_name: >-
-  {{
-    _selected_firewall_info['service_name'][_distribution_key]
-    | default(
-        _selected_firewall_info['service_name'][ansible_facts['distribution']]
-      )
-    | default(_selected_firewall_info['service_name']['default'])
-  }}
-
-firewall_ipv6_service_name: unavailable
-
 _firewall_iptables_rulefile:
   Alpine: /etc/iptables/rules-save
-
-firewall_iptables_rulefile: >-
-  {{
-    _firewall_iptables_rulefile[_distribution_key]
-    | default(
-        _firewall_iptables_rulefile[ansible_facts['distribution']]
-        | default(_firewall_iptables_rulefile['default'] | default(''))
-      )
-  }}
 
 _container_types:
   - docker

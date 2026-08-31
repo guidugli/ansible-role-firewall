@@ -3,16 +3,92 @@
   ansible.builtin.setup:
   when:
     - ansible_facts['distribution'] is not defined
-    - ansible_connection | default('ssh') not in ['ssh', 'paramiko']
+  tags:
+    - firewall
+    - validate
+
+- name: Build distribution lookup key
+  ansible.builtin.set_fact:
+    firewall_distribution_key: >-
+      {{
+        ansible_facts['distribution']
+        ~ '-'
+        ~ ansible_facts['distribution_major_version']
+      }}
   tags:
     - firewall
     - validate
 
 - name: Set distribution-aware firewall default
   ansible.builtin.set_fact:
-    firewall_selected: "{{ _suggested_os_firewall }}"
+    firewall_selected: >-
+      {{
+        _preferred_os_firewall.get(
+          firewall_distribution_key,
+          _preferred_os_firewall.get(
+            ansible_facts['distribution'],
+            _preferred_os_firewall['default']
+          )
+        )
+      }}
   when:
     - firewall_selected is none or firewall_selected | string | trim | length == 0
+  tags:
+    - firewall
+    - config
+
+- name: Select firewall backend information
+  ansible.builtin.set_fact:
+    firewall_selected_info: >-
+      {{
+        _firewalld_info
+        if firewall_selected == 'firewalld'
+        else _ufw_info
+      }}
+  tags:
+    - firewall
+    - validate
+
+- name: Set distribution-aware firewall implementation values
+  ansible.builtin.set_fact:
+    firewall_packages_required: >-
+      {{
+        firewall_selected_info['packages'].get(
+          firewall_distribution_key,
+          firewall_selected_info['packages'].get(
+            ansible_facts['distribution'],
+            firewall_selected_info['packages']['default']
+          )
+        )
+      }}
+    firewall_conflicting_services: >-
+      {{
+        firewall_selected_info['conflicting_services'].get(
+          firewall_distribution_key,
+          firewall_selected_info['conflicting_services'].get(
+            ansible_facts['distribution'],
+            firewall_selected_info['conflicting_services']['default']
+          )
+        )
+      }}
+    firewall_ipv4_service_name: >-
+      {{
+        firewall_selected_info['service_name'].get(
+          firewall_distribution_key,
+          firewall_selected_info['service_name'].get(
+            ansible_facts['distribution'],
+            firewall_selected_info['service_name']['default']
+          )
+        )
+      }}
+    firewall_ipv6_service_name: unavailable
+    firewall_iptables_rulefile: >-
+      {{
+        _firewall_iptables_rulefile.get(
+          firewall_distribution_key,
+          _firewall_iptables_rulefile.get(ansible_facts['distribution'], '')
+        )
+      }}
   tags:
     - firewall
     - config
