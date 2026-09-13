@@ -30,7 +30,7 @@
     ansible_port: '22'
   when:
     - default_ssh is defined
-    - not default_ssh.failed
+    - not (default_ssh.failed | default(false))
   register: ssh_port_set
   tags:
     - firewall
@@ -63,7 +63,7 @@
     ansible_port: "{{ configured_port }}"
   when:
     - configured_ssh is defined
-    - not configured_ssh.failed
+    - not (configured_ssh.failed | default(false))
   register: ssh_port_set
   tags:
     - firewall
