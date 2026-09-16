@@ -5,7 +5,7 @@
 # and dispatch backend-specific firewall configuration.
 
 - name: Detect SSH settings for SSH-based connections
-  ansible.builtin.import_tasks: detect_sshd_port.yml
+  ansible.builtin.include_tasks: detect_sshd_port.yml
   when:
     - ansible_connection | default('ssh') in ['ssh', 'paramiko']
   tags:
