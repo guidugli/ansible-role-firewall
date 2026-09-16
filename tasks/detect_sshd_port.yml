@@ -1,5 +1,6 @@
 ---
 - name: Preserve currently configured SSH port
+  become: false
   ansible.builtin.set_fact:
     configured_port: "{{ ansible_port | default('22') }}"
   tags:
@@ -7,6 +8,7 @@
     - validate
 
 - name: Check if target host is reachable on TCP port 22
+  become: false
   ansible.builtin.wait_for:
     host: >-
       {{
@@ -26,6 +28,7 @@
     - validate
 
 - name: Use TCP port 22 when it is reachable
+  become: false
   ansible.builtin.set_fact:
     ansible_port: '22'
   when:
@@ -38,6 +41,7 @@
     - validate
 
 - name: Check if target host is reachable on configured SSH port
+  become: false
   ansible.builtin.wait_for:
     host: >-
       {{
@@ -61,6 +65,7 @@
     - validate
 
 - name: Keep configured SSH port when it is reachable
+  become: false
   ansible.builtin.set_fact:
     ansible_port: "{{ configured_port }}"
   when:
@@ -72,6 +77,7 @@
     - validate
 
 - name: Fail when the SSH port cannot be auto-detected
+  become: false
   ansible.builtin.fail:
     msg: >-
       Unable to reach {{ inventory_hostname }} on TCP port 22 or
