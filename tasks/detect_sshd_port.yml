@@ -58,7 +58,7 @@
   register: configured_ssh
   when:
     - default_ssh is defined
-    - not (configured_ssh.skipped | default(false))
+    - not (default_ssh.skipped | default(false))
     - default_ssh.failed
   tags:
     - firewall
@@ -70,6 +70,7 @@
     ansible_port: "{{ configured_port }}"
   when:
     - configured_ssh is defined
+    - not (configured_ssh.skipped | default(false))
     - not (configured_ssh.failed | default(false))
   register: ssh_port_set
   tags:
