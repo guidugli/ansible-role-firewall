@@ -42,12 +42,22 @@ def fetch(url: str) -> str:
 
 
 def latest_two_ubuntu_lts(html: str) -> list[str]:
-    matches = re.findall(r"Ubuntu\s+(\d{2}\.\d{2})(?:\.\d+)?\s+LTS", html)
-    seen: list[str] = []
+    matches = re.findall(r'href="(\d{2}\.\d{2})/"', html)
+
+    versions: set[str] = set()
+
     for value in matches:
-        if value not in seen:
-            seen.append(value)
-    return seen[:2]
+        major, minor = map(int, value.split("."))
+
+        # Ubuntu LTS releases are .04 releases in even-numbered years.
+        if minor == 4 and major % 2 == 0:
+            versions.add(value)
+
+    return sorted(
+        versions,
+        key=_parse_major_minor,
+        reverse=True,
+    )[:2]
 
 
 def html_to_text(html: str) -> str:

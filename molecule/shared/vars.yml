@@ -7,8 +7,8 @@ platform_matrix:
         - '13'
         - '12'
     fedora:
+        - '45'
         - '44'
-        - '43'
 images:
     ubuntu: docker.io/library/ubuntu
     debian: docker.io/library/debian
